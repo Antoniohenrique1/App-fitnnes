@@ -1,0 +1,277 @@
+Perfeito — segue um **prompt único**, pronto pra colar no **Replit AI Agent** (“Start building with AI”). Ele já pede stack, telas, banco, APIs, gamificação, evolução, monetização híbrida, LGPD, testes, seeds e deploy. É só colar e deixar o Agente montar o projeto.
+
+---
+
+# Prompt para o Replit Agent — **Fitness AI Coach BR (MVP Gamificado)**
+
+**Objetivo do produto (PT-BR):**
+Crie um app **full-stack** (web responsivo + PWA) que **gera treinos personalizados com IA**, executa **check-in diário** e **adapta o treino do dia**, exibe **HUD gamificado (anéis estilo Apple)**, **XP/níveis, streak com “streak freeze”**, **missões diárias/semanais**, **cofre de recompensas**, e uma área **Evolução** (heatmap de aderência, PR timeline, sono×performance).
+Modelo **freemium + premium**, com **parcerias de profissionais** (personal/nutri/fisio) e **LGPD**.
+Público-alvo: BR, uso **misto** (casa + academia), iniciantes e intermediários.
+
+---
+
+## 1) Stack e padrões
+
+* **Front:** Next.js 14 (App Router) + TypeScript + TailwindCSS + shadcn/ui + lucide-react.
+* **Back/API:** Route Handlers em `/app/api/*` + Zod para validação.
+* **Banco/Auth:** **Supabase** (Auth via Magic Link + Postgres + RLS por `user_id`).
+* **Estado:** RSC + Server Actions quando fizer sentido.
+* **UX/Design:** tema escuro, “fitness-arcade” clean (neons discretos), glassmorphism leve, **micro-animações 150–250ms**.
+* **Qualidade:** ESLint, Prettier, Vitest + Testing Library.
+* **PWA:** manifest + service worker (Add to Home).
+* **Telemetria opcional:** PostHog (chave env).
+* **Erros:** Sentry (env opcional).
+
+**Replit:** preparar para **Autoscale Deploy (web app/API)** e usar **Secrets** para variáveis (ver §10).
+
+---
+
+## 2) Sitemap (páginas)
+
+* `/` **Landing** (hero, como funciona, plano grátis vs premium, CTA “Começar”).
+* `/onboarding` **wizard** curto (idade, sexo, altura, peso, experiência, objetivo, dias/sem, tempo/sessão, equipamentos, lesões, preferências, local casa/academia).
+* `/dashboard` **HUD gamificado**:
+
+  * **Anéis**: Treino (min), Volume (séries efetivas/RIR), Recuperação (sono/tempo/fadiga).
+  * **XP bar + nível**, **streak flame** (com “streak freeze”), **missões** do dia/semana.
+  * Botões: **Iniciar treino**, **Versão Express (25–30 min)**, **Trocar exercício** (se dor≥6).
+* `/workout/[date]` treino do dia (exercícios, séries/reps/descanso, log de carga e RPE).
+* `/evolution` **Evolução**: heatmap de aderência (estilo GitHub), **PR timeline** (sparklines), **distribuição de RPE**, **scatter sono×performance**, badges conquistados, temporadas.
+* `/leagues` ligas semanais (Bronze→Diamante) com ranking leve (10–20 usuários).
+* `/marketplace` **Profissionais** (lista de partners; CTA para consulta/planos).
+* `/account` perfil, preferências (notificações, tema), **LGPD** (download/remoção de dados).
+* `/legal/privacy` e `/legal/terms`.
+
+---
+
+## 3) Modelo de dados (Supabase) — criar migrações SQL
+
+```sql
+-- Usuários
+create table users (
+  id uuid primary key default gen_random_uuid(),
+  email text unique,
+  name text,
+  age int, sex text, height_cm int, weight_kg numeric,
+  experience text, injuries text, equipment text[], goal text,
+  days_per_week int, session_minutes int, location text,
+  created_at timestamptz default now()
+);
+
+-- Programas e treinos
+create table programs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references users(id) on delete cascade,
+  goal text, split text, weeks int default 4, version int default 1,
+  payload jsonb, -- plano completo gerado pela IA
+  created_at timestamptz default now()
+);
+
+create table workouts (
+  id uuid primary key default gen_random_uuid(),
+  program_id uuid references programs(id) on delete cascade,
+  day date, focus text, duration_min int, payload jsonb
+);
+
+-- Check-in e progresso
+create table checkins (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references users(id) on delete cascade,
+  at date, mood int, sleep_hours numeric, pain int, fatigue int, time_available int, rpe int,
+  created_at timestamptz default now()
+);
+
+create table progress (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references users(id) on delete cascade,
+  at date, weight_kg numeric, waist_cm numeric, steps int, notes text
+);
+
+-- Gamificação
+create table badges (id uuid primary key default gen_random_uuid(), key text unique, title text, descr text, icon text);
+create table user_badges (id uuid primary key default gen_random_uuid(), user_id uuid references users(id) on delete cascade, badge_id uuid references badges(id), earned_at timestamptz default now());
+
+create table seasons (id uuid primary key default gen_random_uuid(), month text, theme text);
+create table leagues (id uuid primary key default gen_random_uuid(), week int, tier text);
+create table league_members (id uuid primary key default gen_random_uuid(), league_id uuid references leagues(id) on delete cascade, user_id uuid references users(id) on delete cascade, xp int default 0);
+
+create table cosmetics (id uuid primary key default gen_random_uuid(), key text unique, title text, rarity text);
+create table inventory (id uuid primary key default gen_random_uuid(), user_id uuid references users(id) on delete cascade, cosmetic_id uuid references cosmetics(id), earned_at timestamptz default now());
+
+-- Logs e planos
+create table logs (
+  id bigserial primary key,
+  user_id uuid, event text, cost_tokens int, latency_ms int, meta jsonb,
+  created_at timestamptz default now()
+);
+
+-- Monetização / parceiros
+create table partners (
+  id uuid primary key default gen_random_uuid(),
+  kind text, -- 'personal','nutri','fisio'
+  name text, city text, crn cref crefito text, bio text, avatar_url text,
+  services jsonb, is_active boolean default true
+);
+
+create table orders (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references users(id) on delete cascade,
+  plan text, amount_cents int, status text, provider text, provider_ref text, created_at timestamptz default now()
+);
+```
+
+Ativar **RLS** por `user_id` nas tabelas do usuário.
+
+---
+
+## 4) APIs (Route Handlers) — implementar
+
+* `POST /api/onboarding/generate-program`
+  Valida input (Zod), chama `generatePlan()` (IA), grava `programs` e `workouts`, retorna resumo + treino de hoje.
+
+* `POST /api/checkin/adjust`
+  Input: `{ mood, sleep_hours, pain, fatigue, time_available, rpe, session_planned }`.
+  Chama `adjustWorkout()` (IA), retorna `{ decision, changes, message, next_metrics }` e loga em `logs`.
+
+* `GET /api/workouts/today`
+  Retorna treino do dia do usuário logado.
+
+* `GET /api/dashboard`
+  Agrega dados para anéis (min/volume/recuperação), XP, streak, missões.
+
+* `GET /api/evolution`
+  Retorna dados para heatmap, PRs, RPE, sono×performance, badges.
+
+* `POST /api/claim-weekly-chest`
+  Valida metas semanais e entrega item cosmético aleatório.
+
+* `POST /api/payments/checkout` (provider: **Mercado Pago** ou Stripe)
+  Cria intenção de pagamento e salva `orders`.
+
+* `POST /api/payments/webhook`
+  Atualiza `orders.status` e habilita premium.
+
+* `GET /api/partners`
+  Lista parceiros ativos e serviços.
+
+* `GET /api/health` → `{ ok: true, env: "dev"|"prod" }`.
+
+---
+
+## 5) IA (lib/ai.ts) — wrappers + prompts (saída **JSON** validada por Zod)
+
+**5.1 `generatePlan(userContext) -> PlanJSON`**
+Regra: plano de 4 semanas, seguro, **RIR 1–3**, progressão **2,5–5%** ao atingir topo das reps com RIR≤1; **deload −30%** se dor/fadiga altas ou queda de performance; aquecimento 5–8min; respeitar equipamentos/tempo/lesões; adicionar cardio (Z2/HIIT) conforme objetivo.
+
+**Schema (resumo):**
+
+```ts
+type PlanJSON = {
+  goal: "fat_loss"|"hypertrophy"|"strength"|"conditioning",
+  split: "full_body_3x"|"upper_lower_4x"|"ppl_5x"|"custom",
+  weekly_schedule: ("Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat"|"Sun")[],
+  workouts: {
+    day:string, focus:string, duration_min:number,
+    exercises:{name:string,sets:number,reps:string,rest_sec:number,tempo?:string,notes?:string}[],
+    cardio?:{type:"Z2"|"HIIT",duration_min:number,notes?:string}
+  }[],
+  progression_rules:{rir_target:string,load_increase:string,deload:string},
+  equipment_used:string[], safety:string[]
+}
+```
+
+**5.2 `adjustWorkout(checkin, planned) -> DecisionJSON`**
+
+```ts
+type DecisionJSON = {
+  decision: "maintain"|"reduce_volume"|"swap_exercises"|"express",
+  changes: {exercise:string, action:"reduce_sets"|"swap"|"shorten_rest", from?:any, to?:any}[],
+  message: string,
+  next_metrics: string[]
+}
+```
+
+Critérios: `pain>=6` evitar padrões que irritam; `time_available<35` → versão express; `fatigue>=4` → reduzir volume 20–30%.
+
+**Provider:** abstrair em `lib/ai.ts` usando `process.env.LLM_API_KEY`.
+
+---
+
+## 6) Gamificação (calibração)
+
+* **Anéis**:
+
+  * Treino = minutos planejados vs feitos;
+  * Volume = séries efetivas (RIR 1–3) cumpridas vs meta;
+  * Recuperação = função (sono normalizado, fadiga invertida, tempo disponível).
+    *Nudge near-win* quando ≥80%.
+* **XP/Níveis**: curva levemente exponencial; 1 nível a cada ~2–3 dias no início, depois ~1/mês.
+* **Streak**: contador diário/semanal + **Streak Freeze** (1 “vida”/semana ou usar moedas do cofre).
+* **Missões**: 3 micro-objetivos diários + 1 semanal (ex.: fechar 2 anéis; +2,5% num lift).
+* **Cofre**: recompensa variável semanal (cosméticos, temas, molduras, moedas).
+* **Ligas**: salas de 10–20 usuários por tier; opt-in; ranking semanal leve.
+
+---
+
+## 7) UX e componentes
+
+* **Identidade:** dark, neons discretos (#B5FF00, #00E5FF), **rounded-2xl**, sombras suaves.
+* **Componentes:** `Ring` (SVG animado), `XPBar`, `StreakFlame`, `Missions`, `BadgeGrid`, `LeagueCard`, `Heatmap`, `PRSparkline`, `ScatterCard`.
+* **Microinterações:** confete sutil ao subir nível, *spring* ao completar missão, skeletons em carregamentos.
+* **Copy PT-BR:** direto, acolhedor, motivacional; mensagens curtas; emojis moderados.
+* **Onboarding:** mini-treino “boas-vindas” opcional antes de cadastro; wizard curto; tutorial guiado (tooltips).
+
+---
+
+## 8) Monetização (freemium + premium) e parceiros
+
+* **Grátis:** 1 plano IA básico (renovável), HUD/registro, badges iniciais, missões simples, resumo semanal, anéis.
+* **Premium:** planos avançados/semanais adaptativos, cofre com cosméticos raros, ligas + desafios especiais, evolução completa (todos gráficos), **acesso a profissionais** (chat/consulta/planos).
+* **Pagamentos BR:** **Mercado Pago** (checkout + webhook) ou Stripe; planos mensal/trimestral; página “/pricing”.
+* **Parceiros:** página `/marketplace` listando **personal/nutri/fisio** (tabela `partners`), CTA para agendar/contratar; status salvo em `orders`.
+
+---
+
+## 9) LGPD, segurança e acessibilidade
+
+* **LGPD:** consentimento no onboarding; páginas de **Privacidade** e **Termos**; botão “**Excluir conta e dados**”.
+* **Segurança:** tokens e chaves em **Secrets**; RLS por usuário; validação Zod nas APIs.
+* **A11y:** contraste AA, foco visível, labels; gráficos com descrições alternativas.
+
+---
+
+## 10) Configuração & Deploy (README detalhado)
+
+* **Secrets (Replit):**
+  `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `LLM_API_KEY`, (opcionais) `NEXT_PUBLIC_POSTHOG_KEY`, `SENTRY_DSN`.
+* Scripts: `pnpm db:migrate`, `pnpm db:seed`, `pnpm dev`, `pnpm build`, `pnpm start`, `pnpm test`.
+* **Autoscale Deploy** (web app/API).
+* Rota `/api/health`.
+
+---
+
+## 11) Seeds e conteúdo inicial
+
+* **Exercícios (30+)** com observações e alternativas por equipamento (casa/academia).
+* **Badges**: “Novato 3 dias”, “1ª semana completa”, “PR conquistado”, “Mês épico”.
+* **Cosméticos**: 8 temas (dark/neon), 6 molduras de avatar (raridades), 4 ícones de liga.
+* **Parceiros (mock)**: 3 profissionais (personal/nutri/fisio) com serviços json.
+
+---
+
+## 12) Testes (Vitest + Testing Library)
+
+* **Unit**: validação Zod dos outputs de IA; agregadores do dashboard.
+* **E2E smoke** (mínimo): onboarding → gera plano → check-in → ajuste → evolução renderiza.
+* **Lighthouse**: performance e PWA básico.
+
+---
+
+> **Construa tudo agora.**
+> Se faltar algum Secret, gere placeholders e coloque instruções claras no **README**.
+> Ao finalizar, rode seeds, publique o Deploy e mostre a URL.
+
+---
+
+Se quiser, te mando já uma **variação com tua marca/paleta**; é só dizer o **nome do app** e as **cores** que prefere.
