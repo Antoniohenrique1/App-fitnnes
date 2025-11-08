@@ -8,11 +8,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Dumbbell, ArrowLeft, ArrowRight } from "lucide-react";
 import { useLocation } from "wouter";
+import { useAuth } from "@/lib/auth";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Onboarding() {
   const [, setLocation] = useLocation();
+  const { register, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
   const [step, setStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
+    username: "",
+    password: "",
+    email: "",
     name: "",
     age: "",
     sex: "male",
@@ -30,12 +39,54 @@ export default function Onboarding() {
   const totalSteps = 5;
   const progress = (step / totalSteps) * 100;
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step < totalSteps) {
       setStep(step + 1);
     } else {
-      console.log("Onboarding completed", formData);
-      setLocation("/dashboard");
+      setIsSubmitting(true);
+      try {
+        const userData = {
+          username: formData.username,
+          password: formData.password,
+          email: formData.email,
+          name: formData.name,
+          age: parseInt(formData.age),
+          sex: formData.sex,
+          height: parseInt(formData.height),
+          weight: parseFloat(formData.weight),
+          experience: formData.experience,
+          goal: formData.goal,
+          daysPerWeek: parseInt(formData.daysPerWeek),
+          sessionMinutes: parseInt(formData.sessionMinutes),
+          location: formData.location,
+          equipment: formData.equipment,
+          injuries: formData.injuries,
+        };
+
+        await register(userData);
+
+        toast({
+          title: "Gerando seu plano de treino...",
+          description: "Aguarde enquanto a IA cria um programa personalizado para você",
+        });
+
+        await apiRequest("POST", "/api/workouts/generate-plan", {});
+
+        toast({
+          title: "Plano criado com sucesso!",
+          description: "Seu treino personalizado está pronto",
+        });
+
+        setLocation("/dashboard");
+      } catch (error: any) {
+        toast({
+          title: "Erro ao completar cadastro",
+          description: error.message || "Tente novamente",
+          variant: "destructive",
+        });
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -75,10 +126,42 @@ export default function Onboarding() {
                 </div>
                 <div className="space-y-4">
                   <div className="space-y-2">
+                    <Label htmlFor="username">Nome de usuário</Label>
+                    <Input
+                      id="username"
+                      placeholder="seu_usuario"
+                      value={formData.username}
+                      onChange={(e) => updateFormData("username", e.target.value)}
+                      data-testid="input-username"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Senha</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={formData.password}
+                      onChange={(e) => updateFormData("password", e.target.value)}
+                      data-testid="input-password"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="seu@email.com"
+                      value={formData.email}
+                      onChange={(e) => updateFormData("email", e.target.value)}
+                      data-testid="input-email"
+                    />
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="name">Nome</Label>
                     <Input
                       id="name"
-                      placeholder="Seu nome"
+                      placeholder="Seu nome completo"
                       value={formData.name}
                       onChange={(e) => updateFormData("name", e.target.value)}
                       data-testid="input-name"
@@ -385,8 +468,14 @@ export default function Onboarding() {
               <ArrowLeft className="w-4 h-4 mr-2" />
               Voltar
             </Button>
-            <Button onClick={handleNext} data-testid="button-next">
-              {step < totalSteps ? (
+            <Button 
+              onClick={handleNext} 
+              disabled={isSubmitting || authLoading}
+              data-testid="button-next"
+            >
+              {isSubmitting || authLoading ? (
+                "Processando..."
+              ) : step < totalSteps ? (
                 <>
                   Próximo
                   <ArrowRight className="w-4 h-4 ml-2" />

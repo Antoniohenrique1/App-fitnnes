@@ -1,5 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Heatmap from "@/components/Heatmap";
 import PRSparkline from "@/components/PRSparkline";
@@ -8,24 +9,59 @@ import { Play, Menu, User as UserIcon, Calendar, TrendingUp, Award } from "lucid
 import { Link } from "wouter";
 import StreakFlame from "@/components/StreakFlame";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ScatterChart, Scatter } from "recharts";
+import { useQuery } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import type { UserStats, PersonalRecord, UserBadge } from "@shared/schema";
+
+const BADGE_DEFINITIONS = {
+  streak_7: { id: "streak_7", title: "Sequência de Fogo", description: "Mantenha 7 dias seguidos", icon: "flame" as const, rarity: "epic" as const },
+  workouts_30: { id: "workouts_30", title: "Mês Épico", description: "Complete 30 dias de treino", icon: "award" as const, rarity: "legendary" as const },
+  first_pr: { id: "first_pr", title: "PR Conquistado", description: "Estabeleça um novo recorde pessoal", icon: "zap" as const, rarity: "epic" as const },
+  novice: { id: "novice", title: "Novato", description: "Complete 3 dias de treino", icon: "star" as const, rarity: "common" as const },
+  week_warrior: { id: "week_warrior", title: "1ª Semana", description: "Complete uma semana completa", icon: "trophy" as const, rarity: "rare" as const },
+  dedicated: { id: "dedicated", title: "Dedicação Total", description: "Complete 100 treinos", icon: "heart" as const, rarity: "legendary" as const },
+};
 
 export default function Evolution() {
-  //todo: remove mock functionality
+  const { toast } = useToast();
+  
+  const { data: stats, isLoading: statsLoading } = useQuery<UserStats>({
+    queryKey: ["/api/user/stats"],
+    onError: () => {
+      toast({
+        title: "Erro ao carregar estatísticas",
+        description: "Não foi possível carregar suas estatísticas.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const { data: personalRecords = [], isLoading: prsLoading } = useQuery<PersonalRecord[]>({
+    queryKey: ["/api/personal-records"],
+    onError: () => {
+      toast({
+        title: "Erro ao carregar recordes",
+        description: "Não foi possível carregar seus recordes pessoais.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const { data: userBadges = [], isLoading: badgesLoading } = useQuery<UserBadge[]>({
+    queryKey: ["/api/badges"],
+    onError: () => {
+      toast({
+        title: "Erro ao carregar badges",
+        description: "Não foi possível carregar suas conquistas.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const heatmapData = Array.from({ length: 84 }, (_, i) => ({
     date: new Date(Date.now() - (83 - i) * 86400000).toISOString().split("T")[0],
     count: Math.random() > 0.3 ? Math.floor(Math.random() * 3) + 1 : 0,
   }));
-
-  const prData = [
-    { week: 1, value: 80 },
-    { week: 2, value: 82.5 },
-    { week: 3, value: 82.5 },
-    { week: 4, value: 85 },
-    { week: 5, value: 87.5 },
-    { week: 6, value: 87.5 },
-    { week: 7, value: 90 },
-    { week: 8, value: 92.5 },
-  ];
 
   const rpeData = [
     { rpe: "1-2", count: 12 },
@@ -40,14 +76,11 @@ export default function Evolution() {
     performance: 60 + Math.random() * 40,
   }));
 
-  const badges = [
-    { id: "1", title: "Novato", description: "Complete 3 dias de treino", icon: "star" as const, rarity: "common" as const, earned: true },
-    { id: "2", title: "1ª Semana", description: "Complete uma semana completa", icon: "trophy" as const, rarity: "rare" as const, earned: true },
-    { id: "3", title: "PR Conquistado", description: "Estabeleça um novo recorde pessoal", icon: "zap" as const, rarity: "epic" as const, earned: true },
-    { id: "4", title: "Sequência de Fogo", description: "Mantenha 7 dias seguidos", icon: "flame" as const, rarity: "epic" as const, earned: false },
-    { id: "5", title: "Mês Épico", description: "Complete 30 dias de treino", icon: "award" as const, rarity: "legendary" as const, earned: false },
-    { id: "6", title: "Dedicação Total", description: "Complete 100 treinos", icon: "heart" as const, rarity: "legendary" as const, earned: false },
-  ];
+  const earnedBadgeIds = new Set(userBadges.map(ub => ub.badgeId));
+  const badges = Object.values(BADGE_DEFINITIONS).map(badge => ({
+    ...badge,
+    earned: earnedBadgeIds.has(badge.id),
+  }));
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -74,7 +107,14 @@ export default function Evolution() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <StreakFlame streak={12} freezeAvailable />
+            {statsLoading ? (
+              <Skeleton className="w-20 h-8" />
+            ) : (
+              <StreakFlame 
+                streak={stats?.streak || 0} 
+                freezeAvailable={(stats?.streakFreezes || 0) > 0} 
+              />
+            )}
             <Link href="/account">
               <Button size="icon" variant="ghost" data-testid="button-account">
                 <UserIcon className="w-5 h-5" />
@@ -181,71 +221,89 @@ export default function Evolution() {
           </TabsContent>
 
           <TabsContent value="prs" className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-6">
-              <PRSparkline exerciseName="Supino Reto" data={prData} unit="kg" />
-              <PRSparkline
-                exerciseName="Agachamento"
-                data={[
-                  { week: 1, value: 100 },
-                  { week: 2, value: 105 },
-                  { week: 3, value: 105 },
-                  { week: 4, value: 110 },
-                  { week: 5, value: 115 },
-                  { week: 6, value: 115 },
-                  { week: 7, value: 120 },
-                  { week: 8, value: 125 },
-                ]}
-                unit="kg"
-              />
-              <PRSparkline
-                exerciseName="Desenvolvimento"
-                data={[
-                  { week: 1, value: 50 },
-                  { week: 2, value: 52.5 },
-                  { week: 3, value: 52.5 },
-                  { week: 4, value: 55 },
-                  { week: 5, value: 57.5 },
-                  { week: 6, value: 57.5 },
-                  { week: 7, value: 60 },
-                  { week: 8, value: 62.5 },
-                ]}
-                unit="kg"
-              />
-              <PRSparkline
-                exerciseName="Terra"
-                data={[
-                  { week: 1, value: 120 },
-                  { week: 2, value: 125 },
-                  { week: 3, value: 125 },
-                  { week: 4, value: 130 },
-                  { week: 5, value: 135 },
-                  { week: 6, value: 140 },
-                  { week: 7, value: 140 },
-                  { week: 8, value: 145 },
-                ]}
-                unit="kg"
-              />
-            </div>
+            {prsLoading ? (
+              <div className="grid md:grid-cols-2 gap-6">
+                <Skeleton className="w-full h-32" />
+                <Skeleton className="w-full h-32" />
+              </div>
+            ) : personalRecords.length > 0 ? (
+              <div className="grid md:grid-cols-2 gap-6">
+                {Array.from(new Set(personalRecords.map(pr => pr.exerciseName))).map(exerciseName => {
+                  const exercisePRs = personalRecords
+                    .filter(pr => pr.exerciseName === exerciseName)
+                    .sort((a, b) => new Date(a.achievedAt).getTime() - new Date(b.achievedAt).getTime())
+                    .slice(-8);
+                  
+                  const sparklineData = exercisePRs.map((pr, index) => ({
+                    week: index + 1,
+                    value: pr.load,
+                  }));
+
+                  return (
+                    <PRSparkline
+                      key={exerciseName}
+                      exerciseName={exerciseName}
+                      data={sparklineData}
+                      unit="kg"
+                    />
+                  );
+                })}
+              </div>
+            ) : (
+              <Card className="p-6">
+                <p className="text-center text-muted-foreground">
+                  Nenhum recorde pessoal registrado ainda. Complete alguns treinos para estabelecer seus PRs!
+                </p>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="badges" className="space-y-6">
             <Card className="p-6">
               <h3 className="text-lg font-semibold mb-6">Suas Conquistas</h3>
-              <BadgeGrid badges={badges} />
+              {badgesLoading ? (
+                <Skeleton className="w-full h-64" />
+              ) : (
+                <BadgeGrid badges={badges} />
+              )}
             </Card>
 
             <div className="grid md:grid-cols-3 gap-4">
               <Card className="p-6 text-center">
-                <div className="text-4xl font-bold font-['Outfit'] text-chart-1">3</div>
-                <div className="text-sm text-muted-foreground mt-1">Badges Conquistados</div>
+                {badgesLoading ? (
+                  <Skeleton className="w-full h-16" />
+                ) : (
+                  <>
+                    <div className="text-4xl font-bold font-['Outfit'] text-chart-1">
+                      {userBadges.length}
+                    </div>
+                    <div className="text-sm text-muted-foreground mt-1">Badges Conquistados</div>
+                  </>
+                )}
               </Card>
               <Card className="p-6 text-center">
-                <div className="text-4xl font-bold font-['Outfit'] text-chart-2">850</div>
-                <div className="text-sm text-muted-foreground mt-1">XP Total</div>
+                {statsLoading ? (
+                  <Skeleton className="w-full h-16" />
+                ) : (
+                  <>
+                    <div className="text-4xl font-bold font-['Outfit'] text-chart-2">
+                      {stats?.xp || 0}
+                    </div>
+                    <div className="text-sm text-muted-foreground mt-1">XP Total</div>
+                  </>
+                )}
               </Card>
               <Card className="p-6 text-center">
-                <div className="text-4xl font-bold font-['Outfit'] text-chart-3">12</div>
-                <div className="text-sm text-muted-foreground mt-1">Dia de Sequência</div>
+                {statsLoading ? (
+                  <Skeleton className="w-full h-16" />
+                ) : (
+                  <>
+                    <div className="text-4xl font-bold font-['Outfit'] text-chart-3">
+                      {stats?.streak || 0}
+                    </div>
+                    <div className="text-sm text-muted-foreground mt-1">Dia de Sequência</div>
+                  </>
+                )}
               </Card>
             </div>
           </TabsContent>

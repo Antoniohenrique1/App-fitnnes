@@ -1,9 +1,39 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Dumbbell, Target, Zap, Trophy, Sparkles, Check } from "lucide-react";
-import { Link } from "wouter";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Dumbbell, Target, Zap, Trophy, Sparkles, Check, LogIn } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Landing() {
+  const [, setLocation] = useLocation();
+  const { user, login, isLoading } = useAuth();
+  const { toast } = useToast();
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginData, setLoginData] = useState({ username: "", password: "" });
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await login(loginData.username, loginData.password);
+      setLoginOpen(false);
+      setLocation("/dashboard");
+    } catch (error) {
+      // Error handling is done in the auth context
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <nav className="border-b border-border sticky top-0 bg-background/80 backdrop-blur-md z-50">
@@ -12,9 +42,63 @@ export default function Landing() {
             <Dumbbell className="w-6 h-6 text-primary" />
             <span className="text-xl font-bold font-['Outfit']">FitCoach AI</span>
           </div>
-          <Link href="/onboarding">
-            <Button data-testid="button-start">Começar Grátis</Button>
-          </Link>
+          <div className="flex items-center gap-4">
+            {user ? (
+              <Button asChild data-testid="button-dashboard">
+                <Link href="/dashboard">Dashboard</Link>
+              </Button>
+            ) : (
+              <>
+                <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="ghost" data-testid="button-login">
+                      <LogIn className="w-4 h-4 mr-2" />
+                      Entrar
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent data-testid="dialog-login">
+                    <DialogHeader>
+                      <DialogTitle>Fazer login</DialogTitle>
+                      <DialogDescription>
+                        Entre com suas credenciais para acessar sua conta
+                      </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleLogin} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="login-username">Nome de usuário</Label>
+                        <Input
+                          id="login-username"
+                          placeholder="seu_usuario"
+                          value={loginData.username}
+                          onChange={(e) => setLoginData({ ...loginData, username: e.target.value })}
+                          data-testid="input-login-username"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="login-password">Senha</Label>
+                        <Input
+                          id="login-password"
+                          type="password"
+                          placeholder="••••••••"
+                          value={loginData.password}
+                          onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                          data-testid="input-login-password"
+                          required
+                        />
+                      </div>
+                      <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-submit-login">
+                        {isLoading ? "Entrando..." : "Entrar"}
+                      </Button>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+                <Button asChild data-testid="button-start">
+                  <Link href="/onboarding">Começar Grátis</Link>
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </nav>
 
@@ -36,12 +120,12 @@ export default function Landing() {
                 Treinos personalizados que se adaptam ao seu dia. IA que entende suas necessidades e progride com você.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Link href="/onboarding">
-                  <Button size="lg" className="gap-2" data-testid="button-cta-hero">
+                <Button asChild size="lg" className="gap-2" data-testid="button-cta-hero">
+                  <Link href="/onboarding">
                     <Zap className="w-5 h-5" />
                     Começar Agora
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
                 <Button size="lg" variant="outline" className="gap-2" data-testid="button-learn-more">
                   <Target className="w-5 h-5" />
                   Como Funciona
@@ -125,11 +209,9 @@ export default function Landing() {
                     </li>
                   ))}
                 </ul>
-                <Link href="/onboarding">
-                  <Button variant="outline" className="w-full" data-testid="button-plan-free">
-                    Começar Grátis
-                  </Button>
-                </Link>
+                <Button asChild variant="outline" className="w-full" data-testid="button-plan-free">
+                  <Link href="/onboarding">Começar Grátis</Link>
+                </Button>
               </div>
             </Card>
 
@@ -199,8 +281,8 @@ export default function Landing() {
             <div>
               <h4 className="font-semibold mb-4">Legal</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link href="/legal/privacy"><a className="hover:text-foreground transition-colors">Privacidade</a></Link></li>
-                <li><Link href="/legal/terms"><a className="hover:text-foreground transition-colors">Termos</a></Link></li>
+                <li><Link href="/legal/privacy" className="hover:text-foreground transition-colors">Privacidade</Link></li>
+                <li><Link href="/legal/terms" className="hover:text-foreground transition-colors">Termos</Link></li>
               </ul>
             </div>
           </div>

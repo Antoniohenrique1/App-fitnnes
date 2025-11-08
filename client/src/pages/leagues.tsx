@@ -1,22 +1,53 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import LeagueCard from "@/components/LeagueCard";
 import { Play, Menu, User as UserIcon, Trophy } from "lucide-react";
 import { Link } from "wouter";
 import StreakFlame from "@/components/StreakFlame";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
+import type { UserStats } from "@shared/schema";
+
+interface LeagueMember {
+  userId: string;
+  name: string;
+  weeklyXP: number;
+  rank: number;
+}
 
 export default function Leagues() {
-  //todo: remove mock functionality
-  const mockMembers = [
-    { id: "1", name: "Ana Silva", xp: 2450, rank: 1 },
-    { id: "2", name: "Carlos Santos", xp: 2340, rank: 2 },
-    { id: "3", name: "Maria Oliveira", xp: 2180, rank: 3 },
-    { id: "current", name: "Você", xp: 1950, rank: 4 },
-    { id: "5", name: "João Costa", xp: 1820, rank: 5 },
-    { id: "6", name: "Paula Ferreira", xp: 1680, rank: 6 },
-    { id: "7", name: "Lucas Almeida", xp: 1520, rank: 7 },
-    { id: "8", name: "Fernanda Lima", xp: 1380, rank: 8 },
-  ];
+  const { user } = useAuth();
+  const { toast } = useToast();
+
+  const { data: stats, isLoading: statsLoading } = useQuery<UserStats>({
+    queryKey: ["/api/user/stats"],
+    onError: () => {
+      toast({
+        title: "Erro ao carregar estatísticas",
+        description: "Não foi possível carregar suas estatísticas.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const { data: leagueMembers = [], isLoading: membersLoading } = useQuery<LeagueMember[]>({
+    queryKey: ["/api/leagues", stats?.leagueTier],
+    enabled: !!stats?.leagueTier,
+    onError: () => {
+      toast({
+        title: "Erro ao carregar liga",
+        description: "Não foi possível carregar os membros da liga.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const userRank = leagueMembers.findIndex(m => m.userId === user?.id) + 1;
+  const xpToThirdPlace = userRank > 3 && leagueMembers[2] 
+    ? leagueMembers[2].weeklyXP - (stats?.weeklyXP || 0)
+    : 0;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -43,7 +74,14 @@ export default function Leagues() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <StreakFlame streak={12} freezeAvailable />
+            {statsLoading ? (
+              <Skeleton className="w-20 h-8" />
+            ) : (
+              <StreakFlame 
+                streak={stats?.streak || 0} 
+                freezeAvailable={(stats?.streakFreezes || 0) > 0} 
+              />
+            )}
             <Link href="/account">
               <Button size="icon" variant="ghost" data-testid="button-account">
                 <UserIcon className="w-5 h-5" />
@@ -65,7 +103,9 @@ export default function Leagues() {
         <Card className="p-6 bg-gradient-to-br from-chart-1/10 to-chart-2/10 border-chart-1/20">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-2">
-              <h2 className="text-xl font-bold font-['Outfit']">Sua Liga Atual</h2>
+              <h2 className="text-xl font-bold font-['Outfit']">
+                {statsLoading ? <Skeleton className="w-32 h-7" /> : `Liga ${stats?.leagueTier || "Bronze"}`}
+              </h2>
               <p className="text-sm text-muted-foreground">
                 Termine entre os 3 primeiros para subir de divisão
               </p>
@@ -75,7 +115,20 @@ export default function Leagues() {
         </Card>
 
         <div className="grid md:grid-cols-2 gap-6">
-          <LeagueCard tier="Ouro" members={mockMembers} currentUserId="current" />
+          {membersLoading ? (
+            <Skeleton className="w-full h-96" />
+          ) : (
+            <LeagueCard 
+              tier={(stats?.leagueTier || "Bronze") as "Bronze" | "Prata" | "Ouro" | "Diamante"} 
+              members={leagueMembers.map(m => ({
+                id: m.userId,
+                name: m.name,
+                xp: m.weeklyXP,
+                rank: m.rank,
+              }))} 
+              currentUserId={user?.id || ""} 
+            />
+          )}
           
           <div className="space-y-6">
             <Card className="p-6">
@@ -102,24 +155,30 @@ export default function Leagues() {
 
             <Card className="p-6">
               <h3 className="text-lg font-semibold mb-4">Sua Semana</h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">XP esta semana</span>
-                  <span className="font-bold tabular-nums">320 XP</span>
+              {statsLoading ? (
+                <Skeleton className="w-full h-32" />
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">XP esta semana</span>
+                    <span className="font-bold tabular-nums">{stats?.weeklyXP || 0} XP</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Posição atual</span>
+                    <span className="font-bold">{userRank > 0 ? `${userRank}º lugar` : "—"}</span>
+                  </div>
+                  {userRank > 3 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">XP até o 3º</span>
+                      <span className="font-bold text-chart-1 tabular-nums">{xpToThirdPlace} XP</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Tempo restante</span>
+                    <span className="font-bold">3 dias</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Posição atual</span>
-                  <span className="font-bold">4º lugar</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">XP até o 3º</span>
-                  <span className="font-bold text-chart-1 tabular-nums">230 XP</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Tempo restante</span>
-                  <span className="font-bold">3 dias</span>
-                </div>
-              </div>
+              )}
             </Card>
           </div>
         </div>

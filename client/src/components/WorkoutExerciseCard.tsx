@@ -1,36 +1,147 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Check, RefreshCw } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import type { ExerciseLog } from "@shared/schema";
 
 interface WorkoutExerciseCardProps {
+  id: string;
   name: string;
   sets: number;
   reps: string;
   rest: number;
   notes?: string;
+  logs?: ExerciseLog[];
   onSwap?: () => void;
+  onLogUpdated?: () => void;
 }
 
 export default function WorkoutExerciseCard({
+  id,
   name,
   sets,
   reps,
   rest,
   notes,
+  logs = [],
   onSwap,
+  onLogUpdated,
 }: WorkoutExerciseCardProps) {
   const [completedSets, setCompletedSets] = useState<boolean[]>(new Array(sets).fill(false));
   const [loads, setLoads] = useState<string[]>(new Array(sets).fill(""));
+  const [actualReps, setActualReps] = useState<string[]>(new Array(sets).fill(""));
   const [rpes, setRpes] = useState<number[]>(new Array(sets).fill(0));
+
+  useEffect(() => {
+    if (logs.length > 0) {
+      const newCompleted = new Array(sets).fill(false);
+      const newLoads = new Array(sets).fill("");
+      const newActualReps = new Array(sets).fill("");
+      const newRpes = new Array(sets).fill(0);
+
+      logs.forEach((log) => {
+        const index = log.setNumber - 1;
+        if (index >= 0 && index < sets) {
+          newCompleted[index] = log.completed;
+          newLoads[index] = log.load ? String(log.load) : "";
+          newActualReps[index] = log.reps ? String(log.reps) : "";
+          newRpes[index] = log.rpe || 0;
+        }
+      });
+
+      setCompletedSets(newCompleted);
+      setLoads(newLoads);
+      setActualReps(newActualReps);
+      setRpes(newRpes);
+    }
+  }, [logs, sets]);
+
+  const logSetMutation = useMutation({
+    mutationFn: async (data: {
+      setNumber: number;
+      load?: number;
+      reps?: number;
+      rpe?: number;
+      completed: boolean;
+    }) => {
+      return await apiRequest("POST", "/api/workouts/log-set", {
+        method: "POST",
+        body: JSON.stringify({
+          workoutExerciseId: id,
+          ...data,
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onSuccess: () => {
+      onLogUpdated?.();
+    },
+  });
 
   const toggleSet = (index: number) => {
     const newCompleted = [...completedSets];
     newCompleted[index] = !newCompleted[index];
     setCompletedSets(newCompleted);
-    console.log(`Set ${index + 1} ${newCompleted[index] ? "completed" : "uncompleted"}`);
+
+    logSetMutation.mutate({
+      setNumber: index + 1,
+      load: loads[index] ? parseFloat(loads[index]) : undefined,
+      reps: actualReps[index] ? parseInt(actualReps[index]) : undefined,
+      rpe: rpes[index] || undefined,
+      completed: newCompleted[index],
+    });
+  };
+
+  const handleLoadChange = (index: number, value: string) => {
+    const newLoads = [...loads];
+    newLoads[index] = value;
+    setLoads(newLoads);
+
+    if (value && completedSets[index]) {
+      logSetMutation.mutate({
+        setNumber: index + 1,
+        load: parseFloat(value),
+        reps: actualReps[index] ? parseInt(actualReps[index]) : undefined,
+        rpe: rpes[index] || undefined,
+        completed: completedSets[index],
+      });
+    }
+  };
+
+  const handleRepsChange = (index: number, value: string) => {
+    const newActualReps = [...actualReps];
+    newActualReps[index] = value;
+    setActualReps(newActualReps);
+
+    if (value && completedSets[index]) {
+      logSetMutation.mutate({
+        setNumber: index + 1,
+        load: loads[index] ? parseFloat(loads[index]) : undefined,
+        reps: parseInt(value),
+        rpe: rpes[index] || undefined,
+        completed: completedSets[index],
+      });
+    }
+  };
+
+  const handleRpeChange = (index: number, rpe: number) => {
+    const newRpes = [...rpes];
+    newRpes[index] = rpe;
+    setRpes(newRpes);
+
+    if (completedSets[index]) {
+      logSetMutation.mutate({
+        setNumber: index + 1,
+        load: loads[index] ? parseFloat(loads[index]) : undefined,
+        reps: actualReps[index] ? parseInt(actualReps[index]) : undefined,
+        rpe,
+        completed: completedSets[index],
+      });
+    }
   };
 
   return (
@@ -74,14 +185,19 @@ export default function WorkoutExerciseCard({
               </Button>
               <Input
                 placeholder="Carga (kg)"
+                type="number"
                 value={loads[index]}
-                onChange={(e) => {
-                  const newLoads = [...loads];
-                  newLoads[index] = e.target.value;
-                  setLoads(newLoads);
-                }}
+                onChange={(e) => handleLoadChange(index, e.target.value)}
                 data-testid={`input-load-${index + 1}`}
                 className="flex-1"
+              />
+              <Input
+                placeholder="Reps"
+                type="number"
+                value={actualReps[index]}
+                onChange={(e) => handleRepsChange(index, e.target.value)}
+                data-testid={`input-reps-${index + 1}`}
+                className="w-20"
               />
               <div className="flex gap-1">
                 {[1, 2, 3, 4, 5].map((rpe) => (
@@ -89,12 +205,7 @@ export default function WorkoutExerciseCard({
                     key={rpe}
                     variant={rpes[index] === rpe ? "default" : "outline"}
                     className="cursor-pointer min-w-[32px] justify-center"
-                    onClick={() => {
-                      const newRpes = [...rpes];
-                      newRpes[index] = rpe;
-                      setRpes(newRpes);
-                      console.log(`Set ${index + 1} RPE: ${rpe}`);
-                    }}
+                    onClick={() => handleRpeChange(index, rpe)}
                     data-testid={`badge-rpe-${index + 1}-${rpe}`}
                   >
                     {rpe}
