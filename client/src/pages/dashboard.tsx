@@ -157,27 +157,45 @@ export default function Dashboard() {
           <div className="space-y-6">
             <Card className="p-8">
               <div className="flex justify-center mb-8">
-                <div className="relative">
-                  <ActivityRing percentage={85} color="hsl(var(--chart-1))" size={140} strokeWidth={14} label="Treino" value="34min" />
-                  <div className="absolute inset-0 flex items-center justify-center" style={{ transform: "scale(0.7)" }}>
-                    <ActivityRing percentage={72} color="hsl(var(--chart-2))" size={140} strokeWidth={14} label="Volume" value="18/25" />
-                    <div className="absolute inset-0 flex items-center justify-center" style={{ transform: "scale(0.7)" }}>
-                      <ActivityRing percentage={90} color="hsl(var(--chart-3))" size={140} strokeWidth={14} label="Recuperação" value="90%" />
-                    </div>
+                <div className="relative w-[140px] h-[140px]">
+                  <ActivityRing 
+                    percentage={85} 
+                    color="hsl(var(--chart-1))" 
+                    size={140} 
+                    strokeWidth={14}
+                    showLabel={false}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <ActivityRing 
+                      percentage={72} 
+                      color="hsl(var(--chart-2))" 
+                      size={98} 
+                      strokeWidth={14}
+                      showLabel={false}
+                    />
+                  </div>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <ActivityRing 
+                      percentage={90} 
+                      color="hsl(var(--chart-3))" 
+                      size={56} 
+                      strokeWidth={14}
+                      showLabel={false}
+                    />
                   </div>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
-                  <div className="text-2xl font-bold font-['Outfit'] tabular-nums">34</div>
+                  <div className="text-2xl font-bold font-['Outfit'] tabular-nums text-chart-1">34</div>
                   <div className="text-xs text-muted-foreground">minutos</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold font-['Outfit'] tabular-nums">18/25</div>
+                  <div className="text-2xl font-bold font-['Outfit'] tabular-nums text-chart-2">18/25</div>
                   <div className="text-xs text-muted-foreground">séries</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold font-['Outfit'] tabular-nums">90%</div>
+                  <div className="text-2xl font-bold font-['Outfit'] tabular-nums text-chart-3">90%</div>
                   <div className="text-xs text-muted-foreground">recuperação</div>
                 </div>
               </div>
