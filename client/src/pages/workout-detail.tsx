@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,39 +18,33 @@ export default function WorkoutDetail() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
-  const { data, isLoading, refetch } = useQuery<{
+  const { data, isLoading, refetch, error } = useQuery<{
     workout: Workout;
     exercises: WorkoutExerciseWithLogs[];
   }>({
-    queryKey: ["/api/workouts", id],
-    queryFn: async () => {
-      const response = await fetch(`/api/workouts/${id}`, {
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error("Failed to fetch workout");
-      return response.json();
-    },
+    queryKey: ["/api", "workouts", id],
     enabled: !!id,
-    onError: () => {
+  });
+
+  useEffect(() => {
+    if (error) {
       toast({
         title: "Erro ao carregar treino",
         description: "Não foi possível carregar os detalhes do treino.",
         variant: "destructive",
       });
-    },
-  });
+    }
+  }, [error, toast]);
 
   const completeWorkoutMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("POST", `/api/workouts/${id}/complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
+      const response = await apiRequest("POST", `/api/workouts/${id}/complete`);
+      return await response.json();
     },
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/workouts/today"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/missions/today"] });
+      queryClient.invalidateQueries({ queryKey: ["/api", "user", "stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api", "workouts", "today"] });
+      queryClient.invalidateQueries({ queryKey: ["/api", "missions", "today"] });
       
       toast({
         title: "Treino concluído! 🎉",
@@ -149,7 +144,7 @@ export default function WorkoutDetail() {
             </div>
             <div>
               <div className="text-2xl font-bold font-['Outfit'] tabular-nums">
-                {exercises.reduce((acc, ex) => acc + ex.sets, 0)}
+                {exercises.reduce((acc: number, ex: WorkoutExerciseWithLogs) => acc + ex.sets, 0)}
               </div>
               <div className="text-xs text-muted-foreground">séries totais</div>
             </div>
@@ -162,7 +157,7 @@ export default function WorkoutDetail() {
 
         <div className="space-y-4">
           <h2 className="text-xl font-semibold font-['Outfit']">Exercícios</h2>
-          {exercises.map((exercise) => (
+          {exercises.map((exercise: WorkoutExerciseWithLogs) => (
             <WorkoutExerciseCard
               key={exercise.id}
               id={exercise.id}

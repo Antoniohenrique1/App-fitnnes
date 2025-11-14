@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -24,18 +24,11 @@ export default function Dashboard() {
   const [fatigue, setFatigue] = useState(3);
   const { toast } = useToast();
 
-  const { data: stats, isLoading: statsLoading, isError: statsError } = useQuery<UserStats>({
-    queryKey: ["/api/user/stats"],
-    onError: () => {
-      toast({
-        title: "Erro ao carregar estatísticas",
-        description: "Não foi possível carregar suas estatísticas.",
-        variant: "destructive",
-      });
-    },
+  const { data: stats, isLoading: statsLoading, error: statsError } = useQuery<UserStats>({
+    queryKey: ["/api", "user", "stats"],
   });
 
-  const { data: todayWorkoutData, isLoading: workoutLoading, isError: workoutError } = useQuery<{
+  const { data: todayWorkoutData, isLoading: workoutLoading, error: workoutError } = useQuery<{
     workout: Workout | null;
     exercises: Array<{
       id: number;
@@ -46,35 +39,52 @@ export default function Dashboard() {
       restSeconds: number;
     }>;
   }>({
-    queryKey: ["/api/workouts/today"],
-    onError: () => {
+    queryKey: ["/api", "workouts", "today"],
+  });
+
+  const { data: missions = [], isLoading: missionsLoading, error: missionsError } = useQuery<Mission[]>({
+    queryKey: ["/api", "missions", "today"],
+  });
+
+  useEffect(() => {
+    if (statsError) {
+      toast({
+        title: "Erro ao carregar estatísticas",
+        description: "Não foi possível carregar suas estatísticas.",
+        variant: "destructive",
+      });
+    }
+  }, [statsError, toast]);
+
+  useEffect(() => {
+    if (workoutError) {
       toast({
         title: "Erro ao carregar treino",
         description: "Não foi possível carregar o treino de hoje.",
         variant: "destructive",
       });
-    },
-  });
+    }
+  }, [workoutError, toast]);
 
-  const { data: missions = [], isLoading: missionsLoading, isError: missionsError } = useQuery<Mission[]>({
-    queryKey: ["/api/missions/today"],
-    onError: () => {
+  useEffect(() => {
+    if (missionsError) {
       toast({
         title: "Erro ao carregar missões",
         description: "Não foi possível carregar as missões de hoje.",
         variant: "destructive",
       });
-    },
-  });
+    }
+  }, [missionsError, toast]);
 
   const checkinMutation = useMutation({
     mutationFn: async (data: { mood: number; sleep: number; pain: number; fatigue: number }) => {
-      return await apiRequest("POST", "/api/checkin", data);
+      const response = await apiRequest("POST", "/api/checkin", data);
+      return await response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/workouts/today"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/missions/today"] });
+      queryClient.invalidateQueries({ queryKey: ["/api", "user", "stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api", "workouts", "today"] });
+      queryClient.invalidateQueries({ queryKey: ["/api", "missions", "today"] });
       setCheckinOpen(false);
       toast({
         title: "Check-in realizado!",

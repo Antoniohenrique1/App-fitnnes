@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,28 +22,34 @@ export default function Leagues() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const { data: stats, isLoading: statsLoading } = useQuery<UserStats>({
-    queryKey: ["/api/user/stats"],
-    onError: () => {
+  const { data: stats, isLoading: statsLoading, error: statsError } = useQuery<UserStats>({
+    queryKey: ["/api", "user", "stats"],
+  });
+
+  const { data: leagueMembers = [], isLoading: membersLoading, error: membersError } = useQuery<LeagueMember[]>({
+    queryKey: ["/api", "leagues", stats?.leagueTier || "Bronze"],
+    enabled: !!stats?.leagueTier,
+  });
+
+  useEffect(() => {
+    if (statsError) {
       toast({
         title: "Erro ao carregar estatísticas",
         description: "Não foi possível carregar suas estatísticas.",
         variant: "destructive",
       });
-    },
-  });
+    }
+  }, [statsError, toast]);
 
-  const { data: leagueMembers = [], isLoading: membersLoading } = useQuery<LeagueMember[]>({
-    queryKey: ["/api/leagues", stats?.leagueTier],
-    enabled: !!stats?.leagueTier,
-    onError: () => {
+  useEffect(() => {
+    if (membersError) {
       toast({
         title: "Erro ao carregar liga",
         description: "Não foi possível carregar os membros da liga.",
         variant: "destructive",
       });
-    },
-  });
+    }
+  }, [membersError, toast]);
 
   const userRank = leagueMembers.findIndex(m => m.userId === user?.id) + 1;
   const xpToThirdPlace = userRank > 3 && leagueMembers[2] 

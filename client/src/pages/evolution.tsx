@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,38 +26,47 @@ const BADGE_DEFINITIONS = {
 export default function Evolution() {
   const { toast } = useToast();
   
-  const { data: stats, isLoading: statsLoading } = useQuery<UserStats>({
-    queryKey: ["/api/user/stats"],
-    onError: () => {
+  const { data: stats, isLoading: statsLoading, error: statsError } = useQuery<UserStats>({
+    queryKey: ["/api", "user", "stats"],
+  });
+
+  const { data: personalRecords = [], isLoading: prsLoading, error: prsError } = useQuery<PersonalRecord[]>({
+    queryKey: ["/api", "personal-records"],
+  });
+
+  const { data: userBadges = [], isLoading: badgesLoading, error: badgesError } = useQuery<UserBadge[]>({
+    queryKey: ["/api", "badges"],
+  });
+
+  useEffect(() => {
+    if (statsError) {
       toast({
         title: "Erro ao carregar estatísticas",
         description: "Não foi possível carregar suas estatísticas.",
         variant: "destructive",
       });
-    },
-  });
+    }
+  }, [statsError, toast]);
 
-  const { data: personalRecords = [], isLoading: prsLoading } = useQuery<PersonalRecord[]>({
-    queryKey: ["/api/personal-records"],
-    onError: () => {
+  useEffect(() => {
+    if (prsError) {
       toast({
         title: "Erro ao carregar recordes",
         description: "Não foi possível carregar seus recordes pessoais.",
         variant: "destructive",
       });
-    },
-  });
+    }
+  }, [prsError, toast]);
 
-  const { data: userBadges = [], isLoading: badgesLoading } = useQuery<UserBadge[]>({
-    queryKey: ["/api/badges"],
-    onError: () => {
+  useEffect(() => {
+    if (badgesError) {
       toast({
         title: "Erro ao carregar badges",
         description: "Não foi possível carregar suas conquistas.",
         variant: "destructive",
       });
-    },
-  });
+    }
+  }, [badgesError, toast]);
 
   const heatmapData = Array.from({ length: 84 }, (_, i) => ({
     date: new Date(Date.now() - (83 - i) * 86400000).toISOString().split("T")[0],

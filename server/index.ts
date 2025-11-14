@@ -1,19 +1,17 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
-import connectPg from "connect-pg-simple";
+import MemoryStore from "memorystore";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { pool } from "./db";
 
 const app = express();
-const PgStore = connectPg(session);
+const MemStore = MemoryStore(session);
 
-// Session middleware
+// Session middleware - using in-memory store for development
 app.use(
   session({
-    store: new PgStore({
-      pool,
-      createTableIfMissing: true,
+    store: new MemStore({
+      checkPeriod: 86400000, // prune expired entries every 24h
     }),
     secret: process.env.SESSION_SECRET || "your-secret-key-change-in-production",
     resave: false,

@@ -34,6 +34,13 @@ export default function Landing() {
     }
   };
 
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <nav className="border-b border-border sticky top-0 bg-background/80 backdrop-blur-md z-50">
@@ -126,7 +133,13 @@ export default function Landing() {
                     Começar Agora
                   </Link>
                 </Button>
-                <Button size="lg" variant="outline" className="gap-2" data-testid="button-learn-more">
+                <Button 
+                  size="lg" 
+                  variant="outline" 
+                  className="gap-2" 
+                  onClick={() => scrollToSection("como-funciona")}
+                  data-testid="button-learn-more"
+                >
                   <Target className="w-5 h-5" />
                   Como Funciona
                 </Button>
@@ -144,7 +157,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="py-20 bg-card/30">
+      <section id="como-funciona" className="py-20 bg-card/30 scroll-mt-20">
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold font-['Outfit'] mb-4">Como Funciona</h2>
@@ -182,7 +195,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="py-20">
+      <section id="precos" className="py-20 scroll-mt-20">
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold font-['Outfit'] mb-4">Escolha seu plano</h2>
@@ -265,9 +278,27 @@ export default function Landing() {
             <div>
               <h4 className="font-semibold mb-4">Produto</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-foreground transition-colors">Como funciona</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">Preços</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">Parceiros</a></li>
+                <li>
+                  <button 
+                    type="button"
+                    onClick={() => scrollToSection("como-funciona")} 
+                    className="hover:text-foreground transition-colors"
+                    data-testid="link-footer-como-funciona"
+                  >
+                    Como funciona
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    type="button"
+                    onClick={() => scrollToSection("precos")} 
+                    className="hover:text-foreground transition-colors"
+                    data-testid="link-footer-precos"
+                  >
+                    Preços
+                  </button>
+                </li>
+                <li><Link href="/marketplace" className="hover:text-foreground transition-colors">Parceiros</Link></li>
               </ul>
             </div>
             <div>
