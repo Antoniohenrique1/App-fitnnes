@@ -4,11 +4,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Play, Menu, User as UserIcon, Download, Trash2, LogOut } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth";
 import StreakFlame from "@/components/StreakFlame";
+import type { UserStats } from "@shared/schema";
 
 export default function Account() {
+  const [, setLocation] = useLocation();
+  const { user, logout, isLoading: authLoading } = useAuth();
+
+  const { data: stats, isLoading: statsLoading } = useQuery<UserStats>({
+    queryKey: ["/api", "user", "stats"],
+  });
+
   const handleDownloadData = () => {
     console.log("Downloading user data (LGPD compliance)");
   };
@@ -18,6 +29,20 @@ export default function Account() {
     if (confirmed) {
       console.log("Deleting account and all data (LGPD compliance)");
     }
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    setLocation("/");
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase();
   };
 
   return (
@@ -30,22 +55,18 @@ export default function Account() {
               <span className="text-xl font-bold font-['Outfit']">FitCoach AI</span>
             </div>
             <div className="hidden md:flex items-center gap-6">
-              <Link href="/dashboard">
-                <a className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Dashboard</a>
-              </Link>
-              <Link href="/evolution">
-                <a className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Evolução</a>
-              </Link>
-              <Link href="/leagues">
-                <a className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Ligas</a>
-              </Link>
-              <Link href="/marketplace">
-                <a className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Profissionais</a>
-              </Link>
+              <Link href="/dashboard" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Dashboard</Link>
+              <Link href="/evolution" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Evolução</Link>
+              <Link href="/leagues" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Ligas</Link>
+              <Link href="/marketplace" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Profissionais</Link>
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <StreakFlame streak={12} freezeAvailable />
+            {statsLoading ? (
+              <Skeleton className="w-20 h-8" />
+            ) : (
+              <StreakFlame streak={stats?.streak || 0} freezeAvailable={(stats?.streakFreezes || 0) > 0} />
+            )}
             <Link href="/account">
               <Button size="icon" variant="ghost" data-testid="button-account">
                 <UserIcon className="w-5 h-5" />
@@ -66,16 +87,26 @@ export default function Account() {
 
         <Card className="p-6">
           <div className="space-y-6">
-            <div className="flex items-center gap-4">
-              <Avatar className="w-20 h-20">
-                <AvatarFallback className="text-2xl">JD</AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <h3 className="text-xl font-semibold">João da Silva</h3>
-                <p className="text-sm text-muted-foreground">joao@email.com</p>
+            {authLoading ? (
+              <div className="flex items-center gap-4">
+                <Skeleton className="w-20 h-20 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-6 w-48" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
               </div>
-              <Button variant="outline" data-testid="button-edit-profile">Editar Perfil</Button>
-            </div>
+            ) : (
+              <div className="flex items-center gap-4">
+                <Avatar className="w-20 h-20">
+                  <AvatarFallback className="text-2xl">{user?.name ? getInitials(user.name) : "?"}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <h3 className="text-xl font-semibold">{user?.name || "Usuário"}</h3>
+                  <p className="text-sm text-muted-foreground">{user?.email || ""}</p>
+                </div>
+                <Button variant="outline" data-testid="button-edit-profile">Editar Perfil</Button>
+              </div>
+            )}
 
             <Separator />
 
@@ -84,19 +115,19 @@ export default function Account() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Nome</Label>
-                  <Input defaultValue="João da Silva" data-testid="input-name" />
+                  <Input defaultValue={user?.name || ""} data-testid="input-name" />
                 </div>
                 <div className="space-y-2">
                   <Label>Email</Label>
-                  <Input type="email" defaultValue="joao@email.com" data-testid="input-email" />
+                  <Input type="email" defaultValue={user?.email || ""} data-testid="input-email" />
                 </div>
                 <div className="space-y-2">
                   <Label>Idade</Label>
-                  <Input type="number" defaultValue="28" data-testid="input-age" />
+                  <Input type="number" defaultValue={user?.age?.toString() || ""} data-testid="input-age" />
                 </div>
                 <div className="space-y-2">
                   <Label>Peso (kg)</Label>
-                  <Input type="number" defaultValue="75" data-testid="input-weight" />
+                  <Input type="number" defaultValue={user?.weight?.toString() || ""} data-testid="input-weight" />
                 </div>
               </div>
             </div>
@@ -146,7 +177,7 @@ export default function Account() {
             <Separator />
 
             <div>
-              <Button variant="ghost" className="gap-2 text-muted-foreground" data-testid="button-logout">
+              <Button variant="ghost" className="gap-2 text-muted-foreground" onClick={handleLogout} data-testid="button-logout">
                 <LogOut className="w-4 h-4" />
                 Sair
               </Button>
@@ -157,15 +188,11 @@ export default function Account() {
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Links Úteis</h3>
           <div className="space-y-2">
-            <Link href="/legal/privacy">
-              <a className="block text-sm text-muted-foreground hover:text-primary transition-colors">
-                Política de Privacidade
-              </a>
+            <Link href="/legal/privacy" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
+              Política de Privacidade
             </Link>
-            <Link href="/legal/terms">
-              <a className="block text-sm text-muted-foreground hover:text-primary transition-colors">
-                Termos de Uso
-              </a>
+            <Link href="/legal/terms" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
+              Termos de Uso
             </Link>
           </div>
         </Card>

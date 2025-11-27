@@ -102,18 +102,10 @@ export default function Evolution() {
               <span className="text-xl font-bold font-['Outfit']">FitCoach AI</span>
             </div>
             <div className="hidden md:flex items-center gap-6">
-              <Link href="/dashboard">
-                <a className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Dashboard</a>
-              </Link>
-              <Link href="/evolution">
-                <a className="text-sm font-medium hover:text-primary transition-colors">Evolução</a>
-              </Link>
-              <Link href="/leagues">
-                <a className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Ligas</a>
-              </Link>
-              <Link href="/marketplace">
-                <a className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Profissionais</a>
-              </Link>
+              <Link href="/dashboard" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Dashboard</Link>
+              <Link href="/evolution" className="text-sm font-medium hover:text-primary transition-colors">Evolução</Link>
+              <Link href="/leagues" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Ligas</Link>
+              <Link href="/marketplace" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Profissionais</Link>
             </div>
           </div>
           <div className="flex items-center gap-4">
