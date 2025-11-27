@@ -83,7 +83,22 @@ export default function Landing() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="login-password">Senha</Label>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="login-password">Senha</Label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              toast({
+                                title: "Recuperar senha",
+                                description: "Por favor, entre em contato com o suporte para recuperar sua senha.",
+                              });
+                            }}
+                            className="text-xs text-primary hover:underline"
+                            data-testid="link-forgot-password"
+                          >
+                            Esqueceu a senha?
+                          </button>
+                        </div>
                         <Input
                           id="login-password"
                           type="password"
