@@ -39,7 +39,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { password, ...userWithoutPassword } = user;
       res.json({ user: userWithoutPassword });
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Registration error:", error.message || error);
+      if (error.errors) {
+        console.error("Validation errors:", JSON.stringify(error.errors, null, 2));
+      }
       res.status(400).json({ error: "Invalid request data" });
     }
   });
