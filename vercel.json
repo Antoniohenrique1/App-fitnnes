@@ -1,19 +1,13 @@
 {
     "version": 2,
-    "functions": {
-        "api/index.ts": {
-            "runtime": "@vercel/node",
-            "includeFiles": "dist/**"
-        }
-    },
     "rewrites": [
         {
             "source": "/api/(.*)",
-            "destination": "/api/index"
+            "destination": "/api/index.ts"
         },
         {
             "source": "/(.*)",
-            "destination": "/api/index"
+            "destination": "/api/index.ts"
         }
     ]
 }
