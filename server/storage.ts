@@ -30,53 +30,53 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
-  
+
   // User stats operations
   getUserStats(userId: string): Promise<UserStats | undefined>;
   createUserStats(userId: string): Promise<UserStats>;
   updateUserStats(userId: string, data: Partial<UserStats>): Promise<UserStats | undefined>;
-  
+
   // Workout plan operations
   createWorkoutPlan(plan: { userId: string; name: string; description?: string; weekCount?: number }): Promise<WorkoutPlan>;
   getActiveWorkoutPlan(userId: string): Promise<WorkoutPlan | undefined>;
   getUserWorkoutPlans(userId: string): Promise<WorkoutPlan[]>;
-  
+
   // Workout operations
   createWorkout(workout: { planId: string; weekNumber: number; dayNumber: number; focus: string; duration: number; scheduledDate?: string }): Promise<Workout>;
   getWorkout(id: string): Promise<Workout | undefined>;
   getWorkoutsByPlan(planId: string): Promise<Workout[]>;
   getTodayWorkout(userId: string): Promise<Workout | undefined>;
   completeWorkout(workoutId: string): Promise<Workout | undefined>;
-  
+
   // Workout exercise operations
   createWorkoutExercise(exercise: { workoutId: string; exerciseName: string; sets: number; reps: string; rest: number; notes?: string; orderIndex: number }): Promise<WorkoutExercise>;
   getWorkoutExercises(workoutId: string): Promise<WorkoutExercise[]>;
-  
+
   // Exercise log operations
   logExerciseSet(log: { workoutExerciseId: string; setNumber: number; load?: number; reps?: number; rpe?: number; completed: boolean }): Promise<ExerciseLog>;
   getExerciseLogs(workoutExerciseId: string): Promise<ExerciseLog[]>;
-  
+
   // Check-in operations
   createCheckIn(checkIn: { userId: string; date: string; mood: number; sleep: number; pain: number; fatigue: number }): Promise<CheckIn>;
   getTodayCheckIn(userId: string): Promise<CheckIn | undefined>;
   getUserCheckIns(userId: string, limit?: number): Promise<CheckIn[]>;
-  
+
   // Personal record operations
   createPersonalRecord(pr: { userId: string; exerciseName: string; load: number; reps?: number }): Promise<PersonalRecord>;
   getPersonalRecords(userId: string): Promise<PersonalRecord[]>;
   getExercisePRHistory(userId: string, exerciseName: string): Promise<PersonalRecord[]>;
-  
+
   // Badge operations
   awardBadge(userId: string, badgeId: string): Promise<UserBadge>;
   getUserBadges(userId: string): Promise<UserBadge[]>;
-  
+
   // Mission operations
   createMission(mission: { userId: string; type: string; title: string; description: string; target: number; date: string; xpReward: number }): Promise<Mission>;
   updateMissionProgress(missionId: string, progress: number): Promise<Mission | undefined>;
   completeMission(missionId: string): Promise<Mission | undefined>;
   getTodayMissions(userId: string): Promise<Mission[]>;
   getUserMissions(userId: string): Promise<Mission[]>;
-  
+
   // League operations
   getLeagueMembers(tier: string, limit?: number): Promise<Array<{ userId: string; username: string; name: string; weeklyXP: number; rank: number }>>;
 }
@@ -154,7 +154,7 @@ export class DbStorage implements IStorage {
     const today = new Date().toISOString().split('T')[0];
     const plan = await this.getActiveWorkoutPlan(userId);
     if (!plan) return undefined;
-    
+
     const [workout] = await db.select().from(workouts).where(and(eq(workouts.planId, plan.id), eq(workouts.scheduledDate, today)));
     return workout;
   }
@@ -273,4 +273,308 @@ export class DbStorage implements IStorage {
   }
 }
 
-export const storage = new DbStorage();
+export class MemStorage implements IStorage {
+  private users: Map<string, User>;
+  private userStats: Map<string, UserStats>;
+  private workoutPlans: Map<string, WorkoutPlan>;
+  private workouts: Map<string, Workout>;
+  private workoutExercises: Map<string, WorkoutExercise>;
+  private exerciseLogs: Map<string, ExerciseLog>;
+  private checkIns: Map<string, CheckIn>;
+  private personalRecords: Map<string, PersonalRecord>;
+  private userBadges: Map<string, UserBadge>;
+  private missions: Map<string, Mission>;
+  private currentId: number;
+
+  constructor() {
+    this.users = new Map();
+    this.userStats = new Map();
+    this.workoutPlans = new Map();
+    this.workouts = new Map();
+    this.workoutExercises = new Map();
+    this.exerciseLogs = new Map();
+    this.checkIns = new Map();
+    this.personalRecords = new Map();
+    this.userBadges = new Map();
+    this.missions = new Map();
+    this.currentId = 1;
+  }
+
+  private nextId(): string {
+    return (this.currentId++).toString();
+  }
+
+  // User operations
+  async getUser(id: string): Promise<User | undefined> {
+    return this.users.get(id);
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(u => u.username === username);
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const id = this.nextId();
+    const user = { ...insertUser, id, createdAt: new Date() } as User;
+    this.users.set(id, user);
+    return user;
+  }
+
+  async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+    const updated = { ...user, ...data } as User;
+    this.users.set(id, updated);
+    return updated;
+  }
+
+  // User stats operations
+  async getUserStats(userId: string): Promise<UserStats | undefined> {
+    return Array.from(this.userStats.values()).find(s => s.userId === userId);
+  }
+
+  async createUserStats(userId: string): Promise<UserStats> {
+    const id = this.nextId();
+    const stats: UserStats = {
+      id,
+      userId,
+      xp: 0,
+      level: 1,
+      streak: 0,
+      longestStreak: 0,
+      streakFreezes: 1,
+      lastWorkoutDate: null,
+      totalWorkouts: 0,
+      leagueTier: "Bronze",
+      weeklyXP: 0,
+      updatedAt: new Date()
+    };
+    this.userStats.set(id, stats);
+    return stats;
+  }
+
+  async updateUserStats(userId: string, data: Partial<UserStats>): Promise<UserStats | undefined> {
+    const stats = await this.getUserStats(userId);
+    if (!stats) return undefined;
+    const updated = { ...stats, ...data, updatedAt: new Date() } as UserStats;
+    this.userStats.set(stats.id, updated);
+    return updated;
+  }
+
+  // Workout plan operations
+  async createWorkoutPlan(plan: { userId: string; name: string; description?: string; weekCount?: number }): Promise<WorkoutPlan> {
+    for (const p of this.workoutPlans.values()) {
+      if (p.userId === plan.userId) p.active = false;
+    }
+    const id = this.nextId();
+    const workoutPlan: WorkoutPlan = {
+      id,
+      userId: plan.userId,
+      name: plan.name,
+      description: plan.description || null,
+      weekCount: plan.weekCount || 4,
+      active: true,
+      createdAt: new Date()
+    };
+    this.workoutPlans.set(id, workoutPlan);
+    return workoutPlan;
+  }
+
+  async getActiveWorkoutPlan(userId: string): Promise<WorkoutPlan | undefined> {
+    return Array.from(this.workoutPlans.values()).find(p => p.userId === userId && p.active);
+  }
+
+  async getUserWorkoutPlans(userId: string): Promise<WorkoutPlan[]> {
+    return Array.from(this.workoutPlans.values())
+      .filter(p => p.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  // Workout operations
+  async createWorkout(workout: { planId: string; weekNumber: number; dayNumber: number; focus: string; duration: number; scheduledDate?: string }): Promise<Workout> {
+    const id = this.nextId();
+    const w: Workout = {
+      id,
+      planId: workout.planId,
+      weekNumber: workout.weekNumber,
+      dayNumber: workout.dayNumber,
+      focus: workout.focus,
+      duration: workout.duration,
+      scheduledDate: workout.scheduledDate || null,
+      completed: false,
+      completedAt: null
+    };
+    this.workouts.set(id, w);
+    return w;
+  }
+
+  async getWorkout(id: string): Promise<Workout | undefined> {
+    return this.workouts.get(id);
+  }
+
+  async getWorkoutsByPlan(planId: string): Promise<Workout[]> {
+    return Array.from(this.workouts.values())
+      .filter(w => w.planId === planId)
+      .sort((a, b) => (a.weekNumber - b.weekNumber) || (a.dayNumber - b.dayNumber));
+  }
+
+  async getTodayWorkout(userId: string): Promise<Workout | undefined> {
+    const today = new Date().toISOString().split('T')[0];
+    const plan = await this.getActiveWorkoutPlan(userId);
+    if (!plan) return undefined;
+    return Array.from(this.workouts.values()).find(w => w.planId === plan.id && w.scheduledDate === today);
+  }
+
+  async completeWorkout(workoutId: string): Promise<Workout | undefined> {
+    const workout = this.workouts.get(workoutId);
+    if (!workout) return undefined;
+    const updated = { ...workout, completed: true, completedAt: new Date() };
+    this.workouts.set(workoutId, updated);
+    return updated;
+  }
+
+  // Workout exercise operations
+  async createWorkoutExercise(exercise: { workoutId: string; exerciseName: string; sets: number; reps: string; rest: number; notes?: string; orderIndex: number }): Promise<WorkoutExercise> {
+    const id = this.nextId();
+    const ex: WorkoutExercise = { id, ...exercise, notes: exercise.notes || null };
+    this.workoutExercises.set(id, ex);
+    return ex;
+  }
+
+  async getWorkoutExercises(workoutId: string): Promise<WorkoutExercise[]> {
+    return Array.from(this.workoutExercises.values())
+      .filter(ex => ex.workoutId === workoutId)
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+  }
+
+  // Exercise log operations
+  async logExerciseSet(log: { workoutExerciseId: string; setNumber: number; load?: number; reps?: number; rpe?: number; completed: boolean }): Promise<ExerciseLog> {
+    const id = this.nextId();
+    const exerciseLog: ExerciseLog = {
+      id,
+      workoutExerciseId: log.workoutExerciseId,
+      setNumber: log.setNumber,
+      load: log.load ?? null,
+      reps: log.reps ?? null,
+      rpe: log.rpe ?? null,
+      completed: log.completed,
+      createdAt: new Date()
+    };
+    this.exerciseLogs.set(id, exerciseLog);
+    return exerciseLog;
+  }
+
+  async getExerciseLogs(workoutExerciseId: string): Promise<ExerciseLog[]> {
+    return Array.from(this.exerciseLogs.values())
+      .filter(log => log.workoutExerciseId === workoutExerciseId)
+      .sort((a, b) => a.setNumber - b.setNumber);
+  }
+
+  // Check-in operations
+  async createCheckIn(checkIn: { userId: string; date: string; mood: number; sleep: number; pain: number; fatigue: number }): Promise<CheckIn> {
+    const id = this.nextId();
+    const ci: CheckIn = { id, ...checkIn, createdAt: new Date() };
+    this.checkIns.set(id, ci);
+    return ci;
+  }
+
+  async getTodayCheckIn(userId: string): Promise<CheckIn | undefined> {
+    const today = new Date().toISOString().split('T')[0];
+    return Array.from(this.checkIns.values()).find(ci => ci.userId === userId && ci.date === today);
+  }
+
+  async getUserCheckIns(userId: string, limit: number = 30): Promise<CheckIn[]> {
+    return Array.from(this.checkIns.values())
+      .filter(ci => ci.userId === userId)
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, limit);
+  }
+
+  // Personal record operations
+  async createPersonalRecord(pr: { userId: string; exerciseName: string; load: number; reps?: number }): Promise<PersonalRecord> {
+    const id = this.nextId();
+    const record: PersonalRecord = { id, ...pr, reps: pr.reps ?? null, achievedAt: new Date() };
+    this.personalRecords.set(id, record);
+    return record;
+  }
+
+  async getPersonalRecords(userId: string): Promise<PersonalRecord[]> {
+    return Array.from(this.personalRecords.values())
+      .filter(pr => pr.userId === userId)
+      .sort((a, b) => b.achievedAt.getTime() - a.achievedAt.getTime());
+  }
+
+  async getExercisePRHistory(userId: string, exerciseName: string): Promise<PersonalRecord[]> {
+    return Array.from(this.personalRecords.values())
+      .filter(pr => pr.userId === userId && pr.exerciseName === exerciseName)
+      .sort((a, b) => a.achievedAt.getTime() - b.achievedAt.getTime());
+  }
+
+  // Badge operations
+  async awardBadge(userId: string, badgeId: string): Promise<UserBadge> {
+    const id = this.nextId();
+    const badge: UserBadge = { id, userId, badgeId, earnedAt: new Date() };
+    this.userBadges.set(id, badge);
+    return badge;
+  }
+
+  async getUserBadges(userId: string): Promise<UserBadge[]> {
+    return Array.from(this.userBadges.values()).filter(b => b.userId === userId);
+  }
+
+  // Mission operations
+  async createMission(mission: { userId: string; type: string; title: string; description: string; target: number; date: string; xpReward: number }): Promise<Mission> {
+    const id = this.nextId();
+    const m: Mission = { id, ...mission, progress: 0, completed: false };
+    this.missions.set(id, m);
+    return m;
+  }
+
+  async updateMissionProgress(missionId: string, progress: number): Promise<Mission | undefined> {
+    const mission = this.missions.get(missionId);
+    if (!mission) return undefined;
+    const updated = { ...mission, progress };
+    this.missions.set(missionId, updated);
+    return updated;
+  }
+
+  async completeMission(missionId: string): Promise<Mission | undefined> {
+    const mission = this.missions.get(missionId);
+    if (!mission) return undefined;
+    const updated = { ...mission, completed: true };
+    this.missions.set(missionId, updated);
+    return updated;
+  }
+
+  async getTodayMissions(userId: string): Promise<Mission[]> {
+    const today = new Date().toISOString().split('T')[0];
+    return Array.from(this.missions.values()).filter(m => m.userId === userId && m.date === today);
+  }
+
+  async getUserMissions(userId: string): Promise<Mission[]> {
+    return Array.from(this.missions.values())
+      .filter(m => m.userId === userId)
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  // League operations
+  async getLeagueMembers(tier: string, limit: number = 10): Promise<Array<{ userId: string; username: string; name: string; weeklyXP: number; rank: number }>> {
+    const members = Array.from(this.userStats.values())
+      .filter(s => s.leagueTier === tier)
+      .map(s => {
+        const user = this.users.get(s.userId);
+        return {
+          userId: s.userId,
+          username: user?.username || "unknown",
+          name: user?.name || "Unknown",
+          weeklyXP: s.weeklyXP,
+        };
+      })
+      .sort((a, b) => b.weeklyXP - a.weeklyXP)
+      .slice(0, limit);
+
+    return members.map((m, i) => ({ ...m, rank: i + 1 }));
+  }
+}
+
+export const storage = process.env.DATABASE_URL ? new DbStorage() : new MemStorage();

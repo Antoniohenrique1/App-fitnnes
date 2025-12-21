@@ -1,9 +1,9 @@
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { User, CheckIn } from "@shared/schema";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Initialize Gemini API
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 interface WorkoutPlanRequest {
   user: User;
@@ -82,7 +82,7 @@ DIRETRIZES IMPORTANTES:
 6. Considere lesões: Evite exercícios que possam agravar áreas mencionadas
 7. Se há check-ins recentes mostrando fadiga alta ou sono ruim, ajuste o volume para baixo
 
-Retorne em formato JSON (apenas o JSON, sem texto extra):
+Gere estritamente um JSON válido com a seguinte estrutura (sem markdown, sem texto extra):
 {
   "planName": "Nome do Plano (ex: Hipertrofia Full Body 4x)",
   "description": "Breve descrição do plano",
@@ -107,28 +107,19 @@ Retorne em formato JSON (apenas o JSON, sem texto extra):
 
 Crie TODOS os treinos das 4 semanas (${user.daysPerWeek} dias × 4 semanas = ${(user.daysPerWeek || 3) * 4} treinos no total).`;
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      {
-        role: "system",
-        content: "Você é um personal trainer expert em periodização, RIR e programação de treino. Sempre retorne JSON válido.",
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
-    temperature: 0.7,
-    response_format: { type: "json_object" },
-  });
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text();
 
-  const content = completion.choices[0].message.content;
-  if (!content) {
+    // Clean up potential markdown code blocks if Gemini adds them
+    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("Gemini API error:", error);
     throw new Error("Failed to generate workout plan");
   }
-
-  return JSON.parse(content);
 }
 
 export async function adaptWorkoutForCheckIn(
@@ -164,34 +155,23 @@ Analise o check-in e:
 2. Se fadiga alta (>7) ou sono ruim (<6h): Reduza volume (1 série a menos em tudo) ou sugira versão express
 3. Se humor baixo (<4): Mantenha treino mas seja encorajador
 
-Retorne JSON:
+Retorne JSON válido (sem markdown):
 {
   "adjustmentMessage": "Mensagem amigável explicando os ajustes",
   "modifiedExercises": [mesma estrutura dos exercícios, com ajustes se necessário] ou null se manter original
 }`;
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "system",
-        content: "Você é um personal trainer empático que adapta treinos baseado no estado diário do aluno.",
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
-    temperature: 0.7,
-    response_format: { type: "json_object" },
-  });
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text();
+    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
-  const content = completion.choices[0].message.content;
-  if (!content) {
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("Gemini API error:", error);
     return {
       adjustmentMessage: "Treino mantido. Ouça seu corpo e ajuste a intensidade conforme necessário.",
     };
   }
-
-  return JSON.parse(content);
 }

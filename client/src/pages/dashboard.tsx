@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -8,12 +9,16 @@ import XPBar from "@/components/XPBar";
 import StreakFlame from "@/components/StreakFlame";
 import MissionCard from "@/components/MissionCard";
 import CheckinSlider from "@/components/CheckinSlider";
-import { Play, Zap, RefreshCw, Menu, Trophy, TrendingUp, Users, User as UserIcon, LogOut } from "lucide-react";
+import { PanicPanel } from "@/components/dashboard/panic-panel";
+import { MatrixLoader } from "@/components/ui/matrix-loader";
+import { LevelUpOverlay } from "@/components/ui/level-up-overlay";
+import { Play, Zap, RefreshCw, Menu, Trophy, TrendingUp, Users, User as UserIcon, LogOut, Sparkles, Dumbbell, Calendar, Target } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { UserStats, Workout, Mission } from "@shared/schema";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
@@ -23,6 +28,9 @@ export default function Dashboard() {
   const [pain, setPain] = useState(2);
   const [fatigue, setFatigue] = useState(3);
   const { toast } = useToast();
+
+  const [isMatrixLoading, setIsMatrixLoading] = useState(false);
+  const [showLevelUp, setShowLevelUp] = useState(false);
 
   const { data: stats, isLoading: statsLoading, error: statsError } = useQuery<UserStats>({
     queryKey: ["/api", "user", "stats"],
@@ -47,34 +55,8 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    if (statsError) {
-      toast({
-        title: "Erro ao carregar estatísticas",
-        description: "Não foi possível carregar suas estatísticas.",
-        variant: "destructive",
-      });
-    }
+    if (statsError) toast({ title: "Erro de Conexão", description: "Verifique sua internet.", variant: "destructive" });
   }, [statsError, toast]);
-
-  useEffect(() => {
-    if (workoutError) {
-      toast({
-        title: "Erro ao carregar treino",
-        description: "Não foi possível carregar o treino de hoje.",
-        variant: "destructive",
-      });
-    }
-  }, [workoutError, toast]);
-
-  useEffect(() => {
-    if (missionsError) {
-      toast({
-        title: "Erro ao carregar missões",
-        description: "Não foi possível carregar as missões de hoje.",
-        variant: "destructive",
-      });
-    }
-  }, [missionsError, toast]);
 
   const checkinMutation = useMutation({
     mutationFn: async (data: { mood: number; sleep: number; pain: number; fatigue: number }) => {
@@ -82,21 +64,8 @@ export default function Dashboard() {
       return await response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api", "user", "stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api", "workouts", "today"] });
-      queryClient.invalidateQueries({ queryKey: ["/api", "missions", "today"] });
       setCheckinOpen(false);
-      toast({
-        title: "Check-in realizado!",
-        description: "Seu treino foi adaptado com base nas suas condições.",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Erro ao fazer check-in",
-        description: "Tente novamente.",
-        variant: "destructive",
-      });
+      setIsMatrixLoading(true);
     },
   });
 
@@ -104,243 +73,204 @@ export default function Dashboard() {
     checkinMutation.mutate({ mood, sleep, pain, fatigue });
   };
 
+  const onMatrixComplete = () => {
+    setIsMatrixLoading(false);
+    queryClient.invalidateQueries({ queryKey: ["/api", "user", "stats"] });
+    toast({
+      title: "BOOST ATIVADO 🚀",
+      description: "Séries calibradas para hipertrofia máxima.",
+      className: "border-primary text-primary-foreground bg-primary/20 backdrop-blur-md",
+    });
+  };
+
+  const triggerFakeMatrix = () => setIsMatrixLoading(true);
+  const triggerFakeLevelUp = () => setShowLevelUp(true);
+
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <nav className="border-b border-border sticky top-0 bg-background/80 backdrop-blur-md z-50">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <div className="flex items-center gap-2">
-              <Play className="w-6 h-6 text-primary" />
-              <span className="text-xl font-bold font-['Outfit']">FitCoach AI</span>
+    <div className="min-h-screen bg-transparent flex flex-col relative overflow-hidden pb-20">
+
+      {/* Dynamic Background Blurs */}
+      <div className="fixed top-[-10%] left-[-20%] w-[70%] h-[70%] bg-primary/10 rounded-full blur-[150px] pointer-events-none animate-pulse-glow" />
+      <div className="fixed bottom-[-10%] right-[-20%] w-[60%] h-[60%] bg-secondary/10 rounded-full blur-[150px] pointer-events-none animate-pulse-glow" style={{ animationDelay: '1.5s' }} />
+
+      <AnimatePresence>
+        {isMatrixLoading && <MatrixLoader onComplete={onMatrixComplete} />}
+      </AnimatePresence>
+
+      <LevelUpOverlay
+        isOpen={showLevelUp}
+        level={stats?.level ? stats.level + 1 : 2}
+        newBadges={["Hipertrofia I", "Consistency King"]}
+        onClose={() => setShowLevelUp(false)}
+      />
+
+      {/* HEADER */}
+      <nav className="sticky top-0 z-40 px-4 py-4 bg-background/80 backdrop-blur-xl border-b border-white/5">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <Link href="/dashboard">
+            <div className="flex items-center gap-2 group cursor-pointer">
+              <div className="bg-primary/20 p-2 rounded-xl group-hover:bg-primary/30 transition-colors">
+                <Zap className="w-5 h-5 text-primary fill-current" />
+              </div>
+              <span className="text-2xl font-black font-['Outfit'] tracking-tighter italic uppercase text-white">
+                Agreste<span className="text-primary">.AI</span>
+              </span>
             </div>
-            <div className="hidden md:flex items-center gap-6">
-              <Link href="/dashboard" className="text-sm font-medium hover:text-primary transition-colors">Dashboard</Link>
-              <Link href="/evolution" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Evolução</Link>
-              <Link href="/leagues" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Ligas</Link>
-              <Link href="/marketplace" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Profissionais</Link>
+          </Link>
+
+          <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-2 bg-white/5 rounded-full px-3 py-1 border border-white/5">
+              <StreakFlame streak={stats?.streak || 0} freezeAvailable={(stats?.streakFreezes || 0) > 0} />
             </div>
-          </div>
-          <div className="flex items-center gap-4">
-            {statsLoading ? (
-              <Skeleton className="w-20 h-8" />
-            ) : (
-              <StreakFlame 
-                streak={stats?.streak || 0} 
-                freezeAvailable={(stats?.streakFreezes || 0) > 0} 
-              />
-            )}
             <Link href="/account">
-              <Button size="icon" variant="ghost" data-testid="button-account">
-                <UserIcon className="w-5 h-5" />
-              </Button>
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-white/10 to-transparent border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer">
+                <UserIcon className="w-5 h-5 text-white" />
+              </div>
             </Link>
-            <Button size="icon" variant="ghost" className="md:hidden" data-testid="button-menu">
-              <Menu className="w-5 h-5" />
-            </Button>
           </div>
         </div>
       </nav>
 
-      <div className="flex-1 max-w-7xl mx-auto px-4 py-8 w-full space-y-8">
-        <div className="space-y-4">
-          <h1 className="text-3xl font-bold font-['Outfit']">Bom dia! 👋</h1>
-          {statsLoading ? (
-            <Skeleton className="w-full h-10" />
-          ) : (
-            <XPBar 
-              currentXP={stats?.xp || 0} 
-              totalXP={1200} 
-              level={stats?.level || 1} 
-            />
-          )}
-        </div>
+      <div className="flex-1 max-w-7xl mx-auto px-4 w-full space-y-6 pt-6 z-10">
 
-        <div className="grid md:grid-cols-2 gap-8">
-          <div className="space-y-6">
-            <Card className="p-8">
-              <div className="flex justify-center mb-8">
-                <div className="relative w-[140px] h-[140px]">
-                  <ActivityRing 
-                    percentage={85} 
-                    color="hsl(var(--chart-1))" 
-                    size={140} 
-                    strokeWidth={14}
-                    showLabel={false}
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <ActivityRing 
-                      percentage={72} 
-                      color="hsl(var(--chart-2))" 
-                      size={98} 
-                      strokeWidth={14}
-                      showLabel={false}
-                    />
+        {/* WELCOME SECTION */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-between items-end">
+          <div>
+            <h1 className="text-3xl font-bold font-['Outfit'] text-white">
+              Bom dia, <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Lenda</span>
+            </h1>
+            <p className="text-sm text-muted-foreground font-medium">Foco de hoje: <span className="text-white">Costas & Bíceps</span></p>
+          </div>
+          <StreakFlame streak={stats?.streak || 0} freezeAvailable={false} className="md:hidden" />
+        </motion.div>
+
+        {/* PANIC PANEL - Now simpler and cleaner */}
+        <PanicPanel />
+
+        {/* XP BAR CARD */}
+        <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}>
+          <Card className="p-1 rounded-2xl bg-gradient-to-r from-white/5 to-transparent border-0 ring-1 ring-white/10">
+            <div className="bg-card/50 backdrop-blur-md rounded-xl p-4">
+              <XPBar currentXP={stats?.xp || 0} totalXP={1200} level={stats?.level || 1} />
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* MAIN GRID */}
+        <div className="grid md:grid-cols-2 gap-6">
+
+          {/* WORKOUT ACTION CARD - THE HERO */}
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }} className="space-y-4">
+            <Card className="relative overflow-hidden border-0 bg-card/60 backdrop-blur-xl ring-1 ring-white/10 rounded-3xl group">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent opacity-50 group-hover:opacity-100 transition-opacity duration-500" />
+
+              <div className="relative p-6 z-10">
+                <div className="flex justify-between items-start mb-6">
+                  <div className="space-y-1">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider border border-primary/20">
+                      <Target className="w-3 h-3" /> Hipertrofia
+                    </span>
+                    <h2 className="text-3xl font-black font-['Outfit'] text-white uppercase tracking-tight leading-none mt-2">
+                      Protocolo<br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-white">Alpha</span>
+                    </h2>
                   </div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <ActivityRing 
-                      percentage={90} 
-                      color="hsl(var(--chart-3))" 
-                      size={56} 
-                      strokeWidth={14}
-                      showLabel={false}
-                    />
+
+                  {/* MINI RINGS */}
+                  <div className="relative w-16 h-16">
+                    <ActivityRing percentage={stats?.streak ? 80 : 0} size={64} strokeWidth={6} color="hsl(var(--primary))" showLabel={false} />
                   </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <div className="text-2xl font-bold font-['Outfit'] tabular-nums text-chart-1">34</div>
-                  <div className="text-xs text-muted-foreground">minutos</div>
+
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                  <div className="p-3 bg-white/5 rounded-2xl backdrop-blur-sm border border-white/5 flex flex-col items-center justify-center gap-1">
+                    <Dumbbell className="w-5 h-5 text-accent mb-1" />
+                    <span className="text-lg font-bold text-white">6</span>
+                    <span className="text-[10px] text-muted-foreground uppercase">Exercícios</span>
+                  </div>
+                  <div className="p-3 bg-white/5 rounded-2xl backdrop-blur-sm border border-white/5 flex flex-col items-center justify-center gap-1">
+                    <Calendar className="w-5 h-5 text-secondary mb-1" />
+                    <span className="text-lg font-bold text-white">45m</span>
+                    <span className="text-[10px] text-muted-foreground uppercase">Duração</span>
+                  </div>
                 </div>
-                <div>
-                  <div className="text-2xl font-bold font-['Outfit'] tabular-nums text-chart-2">18/25</div>
-                  <div className="text-xs text-muted-foreground">séries</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold font-['Outfit'] tabular-nums text-chart-3">90%</div>
-                  <div className="text-xs text-muted-foreground">recuperação</div>
-                </div>
+
+                {todayWorkoutData?.workout ? (
+                  <Link href={`/workout/${todayWorkoutData.workout.id}`}>
+                    <Button className="w-full h-14 bg-primary text-black hover:bg-primary/90 font-bold text-base rounded-xl shadow-neon hover:scale-[1.02] transition-all duration-300">
+                      <Play className="w-5 h-5 mr-2 fill-black" /> INICIAR SESSÃO
+                    </Button>
+                  </Link>
+                ) : (
+                  <div className="space-y-3">
+                    <Button
+                      className="w-full h-14 bg-white/10 text-white hover:bg-white/20 font-bold text-base rounded-xl border border-white/10"
+                      onClick={() => setCheckinOpen(true)}
+                    >
+                      <RefreshCw className="w-5 h-5 mr-2" /> CALIBRAR AGORA
+                    </Button>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" onClick={triggerFakeMatrix} className="flex-1 text-xs text-muted-foreground">Tech Demo</Button>
+                      <Button variant="ghost" size="sm" onClick={triggerFakeLevelUp} className="flex-1 text-xs text-muted-foreground">Lvl Demo</Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
 
-            <div className="space-y-3">
-              <Dialog open={checkinOpen} onOpenChange={setCheckinOpen}>
-                <DialogTrigger asChild>
-                  <Button className="w-full gap-2 h-12" size="lg" data-testid="button-start-workout">
-                    <Play className="w-5 h-5" />
-                    Iniciar Treino
+            {/* CHECKIN DIALOG */}
+            <Dialog open={checkinOpen} onOpenChange={setCheckinOpen}>
+              <DialogContent className="border-0 bg-zinc-950/90 backdrop-blur-2xl sm:max-w-[425px] gap-6 rounded-3xl ring-1 ring-white/10">
+                <DialogHeader>
+                  <DialogTitle className="text-2xl font-bold font-['Outfit'] text-center">Calibração</DialogTitle>
+                  <DialogDescription className="text-center text-white/60">Ajuste fino da IA para hoje</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-6 py-2">
+                  <CheckinSlider label="⚡ Energia" value={fatigue} onChange={setFatigue} emoji={["💀", "🪫", "🔋", "⚡", "☢️"]} />
+                  <CheckinSlider label="🧠 Foco" value={mood} onChange={setMood} emoji={["🌫️", "☁️", "🌤️", "☀️", "🔥"]} />
+                  <Button onClick={handleCheckin} className="w-full h-12 bg-primary text-black font-bold shadow-neon text-lg rounded-xl">
+                    APLICAR
                   </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Check-in Diário</DialogTitle>
-                    <DialogDescription>
-                      Como você está hoje? Vou adaptar o treino pra você.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-6 py-4">
-                    <CheckinSlider
-                      label="Como você está se sentindo?"
-                      value={mood}
-                      onChange={setMood}
-                      emoji={["😫", "😕", "😐", "🙂", "😊"]}
-                    />
-                    <CheckinSlider
-                      label="Horas de sono"
-                      value={sleep}
-                      onChange={setSleep}
-                      min={0}
-                      max={12}
-                    />
-                    <CheckinSlider
-                      label="Nível de dor"
-                      value={pain}
-                      onChange={setPain}
-                      emoji={["😌", "😌", "😐", "😣", "😖"]}
-                    />
-                    <CheckinSlider
-                      label="Nível de fadiga"
-                      value={fatigue}
-                      onChange={setFatigue}
-                      emoji={["🔋", "🔋", "⚡", "🪫", "💤"]}
-                    />
-                    <Button onClick={handleCheckin} className="w-full" data-testid="button-confirm-checkin">
-                      Confirmar e adaptar treino
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </motion.div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Button variant="outline" className="gap-2" data-testid="button-express-workout">
-                  <Zap className="w-4 h-4" />
-                  Versão Express
-                </Button>
-                <Button variant="outline" className="gap-2" data-testid="button-swap-exercise">
-                  <RefreshCw className="w-4 h-4" />
-                  Trocar Exercício
-                </Button>
-              </div>
+          {/* MISSIONS & STATS */}
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="space-y-4">
+
+            <div className="flex items-center justify-between px-1">
+              <h3 className="font-bold text-lg flex items-center gap-2"><Trophy className="w-5 h-5 text-yellow-400" /> Missões</h3>
+              <span className="text-xs font-medium text-muted-foreground bg-white/5 px-2 py-1 rounded-lg">Reset em 4h</span>
             </div>
-          </div>
 
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Missões de Hoje</h3>
+            <div className="grid gap-3">
               {missionsLoading ? (
-                <div className="space-y-3">
-                  <Skeleton className="w-full h-20" />
-                  <Skeleton className="w-full h-20" />
-                  <Skeleton className="w-full h-20" />
-                </div>
+                [1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full rounded-xl bg-white/5" />)
               ) : missions.length > 0 ? (
-                <div className="space-y-3">
-                  {missions.map((mission) => (
-                    <MissionCard
-                      key={mission.id}
-                      title={mission.title}
-                      description={mission.description}
-                      progress={mission.progress}
-                      total={mission.target}
-                      completed={mission.completed}
-                      icon={
-                        mission.type === "workout" ? <Play className="w-4 h-4" /> :
-                        mission.type === "volume" ? <Trophy className="w-4 h-4" /> :
-                        <TrendingUp className="w-4 h-4" />
-                      }
-                    />
-                  ))}
-                </div>
+                missions.map(m => (
+                  <MissionCard key={m.id} title={m.title} description={m.description} progress={m.progress} total={m.target} completed={m.completed}
+                    icon={m.type === 'workout' ? <Dumbbell className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
+                  />
+                ))
               ) : (
-                <Card className="p-6">
-                  <p className="text-sm text-muted-foreground text-center">
-                    Nenhuma missão disponível hoje
-                  </p>
-                </Card>
+                <div className="p-6 rounded-2xl bg-white/5 border border-white/5 text-center">
+                  <Sparkles className="w-8 h-8 text-primary mx-auto mb-2 opacity-50" />
+                  <p className="text-sm text-muted-foreground">Tudo feito por hoje!</p>
+                </div>
               )}
             </div>
 
-            {workoutLoading ? (
-              <Skeleton className="w-full h-48" />
-            ) : todayWorkoutData?.workout ? (
-              <Card className="p-6 bg-gradient-to-br from-chart-1/10 to-chart-2/10 border-chart-1/20">
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold">Treino de Hoje</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Foco</span>
-                      <span className="font-medium">{todayWorkoutData.workout.focus}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Duração</span>
-                      <span className="font-medium">{todayWorkoutData.workout.duration} minutos</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Exercícios</span>
-                      <span className="font-medium">{todayWorkoutData.exercises.length} exercícios</span>
-                    </div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    className="w-full mt-4"
-                    onClick={() => setLocation(`/workout/${todayWorkoutData.workout?.id}`)}
-                    data-testid="button-view-workout"
-                  >
-                    Ver Detalhes
-                  </Button>
-                </div>
-              </Card>
-            ) : (
-              <Card className="p-6 bg-gradient-to-br from-chart-1/10 to-chart-2/10 border-chart-1/20">
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold">Treino de Hoje</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Nenhum treino programado para hoje
-                  </p>
-                </div>
-              </Card>
-            )}
-          </div>
+            {/* QUICK ACTIONS */}
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <Button variant="outline" className="h-12 border-white/10 bg-white/5 hover:bg-white/10 hover:border-primary/50 hover:text-primary transition-all rounded-xl">
+                <Users className="w-4 h-4 mr-2" /> Comunidade
+              </Button>
+              <Button variant="outline" className="h-12 border-white/10 bg-white/5 hover:bg-white/10 hover:border-accent/50 hover:text-accent transition-all rounded-xl">
+                <TrendingUp className="w-4 h-4 mr-2" /> Ranking
+              </Button>
+            </div>
+
+          </motion.div>
         </div>
       </div>
     </div>
