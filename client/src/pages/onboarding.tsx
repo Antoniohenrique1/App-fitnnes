@@ -45,23 +45,51 @@ export default function Onboarding() {
     } else {
       setIsSubmitting(true);
       try {
+        const parseSafeInt = (val: string) => {
+          const parsed = parseInt(val);
+          return isNaN(parsed) ? null : parsed;
+        };
+
+        const parseSafeFloat = (val: string) => {
+          const parsed = parseFloat(val);
+          return isNaN(parsed) ? null : parsed;
+        };
+
         const userData = {
-          username: formData.username,
+          username: formData.username.trim(),
           password: formData.password,
-          email: formData.email,
-          name: formData.name,
-          age: parseInt(formData.age),
+          email: formData.email.trim(),
+          name: formData.name.trim(),
+          age: parseSafeInt(formData.age),
           sex: formData.sex,
-          height: parseInt(formData.height),
-          weight: parseFloat(formData.weight),
+          height: parseSafeInt(formData.height),
+          weight: parseSafeFloat(formData.weight),
           experience: formData.experience,
           goal: formData.goal,
-          daysPerWeek: parseInt(formData.daysPerWeek),
-          sessionMinutes: parseInt(formData.sessionMinutes),
+          daysPerWeek: parseSafeInt(formData.daysPerWeek),
+          sessionMinutes: parseSafeInt(formData.sessionMinutes),
           location: formData.location,
           equipment: formData.equipment,
           injuries: formData.injuries,
         };
+
+        if (!userData.username || !userData.password || !userData.email || !userData.name) {
+          throw new Error("Por favor, preencha todos os campos obrigatórios (usuário, senha, email e nome).");
+        const errors: string[] = [];
+
+        if (!userData.username) errors.push("Nome de usuário");
+        if (!userData.password) errors.push("Senha");
+        if (!userData.email) errors.push("Email");
+        if (!userData.name) errors.push("Nome");
+        if (userData.age === null) errors.push("Idade");
+        if (userData.height === null) errors.push("Altura");
+        if (userData.weight === null) errors.push("Peso");
+        if (userData.daysPerWeek === null) errors.push("Dias de treino por semana");
+        if (userData.sessionMinutes === null) errors.push("Minutos por sessão");
+
+        if (errors.length > 0) {
+          throw new Error(`Por favor, preencha ou corrija os seguintes campos: ${errors.join(", ")}.`);
+        }
 
         await register(userData);
 
