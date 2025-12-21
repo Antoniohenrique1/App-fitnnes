@@ -68,30 +68,39 @@ app.use((req, res, next) => {
   next();
 });
 
-// FOR VERCEL/PRODUCTION: Handle registration and static files
-// We export a promise-based app or just the app after registration
-const setupProject = async () => {
-  await registerRoutes(app);
+// FOR VERCEL: We need a way to ensure routes are registered
+// before the first request hits.
+let routesRegistered = false;
+const registrationPromise = registerRoutes(app).then(() => {
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   }
-};
+  routesRegistered = true;
+  log("Agreste Server: Routes and Static files initialized");
+}).catch(err => {
+  console.error("Critical: Failed to initialize Agreste Server", err);
+});
 
-// Execute setup
+// Middleware to wait for registration in a serverless environment
+app.use(async (_req, _res, next) => {
+  if (!routesRegistered) {
+    await registrationPromise;
+  }
+  next();
+});
+
+// Handling local dev server
 if (process.env.NODE_ENV !== "production") {
   (async () => {
-    const server = await registerRoutes(app);
+    // Already handled by the promise above for initialization logic,
+    // but we need to start the listener locally.
+    const server = await registrationPromise.then(() => registerRoutes(app)); // Re-get server instance for local listen
     await setupVite(app, server);
     const port = parseInt(process.env.PORT || '5000', 10);
     server.listen(port, "0.0.0.0", () => {
       log(`serving on port ${port}`);
     });
   })();
-} else {
-  // In Vercel, routes are registered during the first import
-  setupProject().catch(err => {
-    console.error("Critical: Failed to initialize Agreste Server", err);
-  });
 }
 
 export default app;
