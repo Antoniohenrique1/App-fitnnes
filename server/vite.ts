@@ -67,11 +67,12 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "..", "dist", "public");
+  const distPath = path.resolve(process.cwd(), "dist", "public");
 
   if (!fs.existsSync(distPath)) {
     log(`Warning: Build directory NOT found at ${distPath}. Static files may not serve correctly.`);
-    return;
+  } else {
+    log(`Build directory found at ${distPath}. Serving static files.`);
   }
 
   app.use(express.static(distPath));
