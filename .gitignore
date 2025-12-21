@@ -8,3 +8,10 @@ vite.config.ts.*
 *.log
 node.zip
 test-db.js
+.agent
+.local
+.vscode
+.replit
+replit.nix
+*.bin
+.agent_state_*
