@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import { generateWorkoutPlan, adaptWorkoutForCheckIn } from "./ai.js";
-import { insertUserSchema, insertCheckInSchema, workoutExercises } from "@shared/schema";
+import { insertUserSchema, insertCheckInSchema, workoutExercises } from "../shared/schema.js";
 import { db } from "./db.js";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";

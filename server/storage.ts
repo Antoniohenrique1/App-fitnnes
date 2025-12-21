@@ -22,7 +22,7 @@ import {
   personalRecords,
   userBadges,
   missions,
-} from "@shared/schema";
+} from "../shared/schema.js";
 
 export interface IStorage {
   // User operations
