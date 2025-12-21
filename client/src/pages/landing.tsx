@@ -323,7 +323,7 @@ export default function Landing() {
                     {feature}
                   </li>
                 ))}
-                <li className="flex items-center gap-3 text-sm text-white/30 decoration-slice line-through">
+                <li className="flex items-center gap-3 text-sm text-muted-foreground/60 decoration-white/20 decoration-2 line-through font-medium">
                   IA Geradora de Treinos
                 </li>
               </ul>
@@ -401,7 +401,7 @@ export default function Landing() {
       <footer className="py-12 border-t border-white/5 bg-zinc-950/50 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <div className="flex items-center justifyContent-center gap-2 mb-4 opacity-50 hover:opacity-100 transition-opacity justify-center">
-            <Zap className="w-5 h-5" />
+            <Zap className="w-5 h-5 text-primary fill-current" />
             <span className="font-bold font-['Outfit'] text-lg uppercase">Agreste Suplementos</span>
           </div>
           <p className="text-sm text-muted-foreground">Potência Pura & Inteligência Artificial © 2024</p>
