@@ -1,12 +1,12 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
-import { generateWorkoutPlan, adaptWorkoutForCheckIn } from "./ai";
+import { storage } from "./storage.js";
+import { generateWorkoutPlan, adaptWorkoutForCheckIn } from "./ai.js";
 import { insertUserSchema, insertCheckInSchema, workoutExercises } from "@shared/schema";
-import { db } from "./db";
+import { db } from "./db.js";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
-import "./types";
+import "./types.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
@@ -14,7 +14,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userData = insertUserSchema.parse(req.body);
       const existingUser = await storage.getUserByUsername(userData.username);
-      
+
       if (existingUser) {
         return res.status(400).json({ error: "Username already exists" });
       }
@@ -118,7 +118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const recentCheckIns = await storage.getUserCheckIns(req.session.userId, 7);
-      
+
       const aiPlan = await generateWorkoutPlan({ user, recentCheckIns });
 
       const plan = await storage.createWorkoutPlan({
@@ -191,7 +191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     const exercises = await storage.getWorkoutExercises(workout.id);
-    
+
     const exercisesWithLogs = await Promise.all(
       exercises.map(async (ex) => {
         const logs = await storage.getExerciseLogs(ex.id);
@@ -224,7 +224,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (exercise[0]) {
           const currentPRs = await storage.getExercisePRHistory(req.session.userId, exercise[0].exerciseName);
           const maxPR = currentPRs.length > 0 ? Math.max(...currentPRs.map(pr => pr.load)) : 0;
-          
+
           if (load > maxPR) {
             await storage.createPersonalRecord({
               userId: req.session.userId,
@@ -264,7 +264,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const lastDate = new Date(lastWorkout);
           const todayDate = new Date(today);
           const diffDays = Math.floor((todayDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
-          
+
           if (diffDays === 1) {
             newStreak = stats.streak + 1;
           } else if (diffDays > 1) {
