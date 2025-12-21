@@ -132,8 +132,32 @@ export const missions = pgTable("missions", {
   xpReward: integer("xp_reward").notNull(),
 });
 
-// Zod schemas
-export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
+// Zod schemas with improved validation
+export const insertUserSchema = createInsertSchema(users, {
+  // Required fields with validation
+  username: z.string().min(3, "Username must be at least 3 characters").max(50),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  email: z.string().email("Invalid email format"),
+  name: z.string().min(1, "Name is required").max(100),
+
+  // Optional numeric fields with coercion and validation
+  age: z.coerce.number().int().min(10, "Age must be at least 10").max(120, "Age must be less than 120").nullable().optional(),
+  height: z.coerce.number().int().min(100, "Height must be at least 100cm").max(250, "Height must be less than 250cm").nullable().optional(),
+  weight: z.coerce.number().min(30, "Weight must be at least 30kg").max(300, "Weight must be less than 300kg").nullable().optional(),
+  daysPerWeek: z.coerce.number().int().min(1).max(7).nullable().optional(),
+  sessionMinutes: z.coerce.number().int().min(15).max(180).nullable().optional(),
+
+  // Optional text fields
+  sex: z.enum(["male", "female"]).nullable().optional(),
+  experience: z.enum(["beginner", "intermediate", "advanced"]).nullable().optional(),
+  goal: z.enum(["fat_loss", "hypertrophy", "strength", "conditioning"]).nullable().optional(),
+  location: z.enum(["home", "gym", "both"]).nullable().optional(),
+
+  // Array fields
+  equipment: z.array(z.string()).nullable().optional().default([]),
+  injuries: z.string().nullable().optional(),
+}).omit({ id: true, createdAt: true });
+
 export const insertUserStatsSchema = createInsertSchema(userStats).omit({ id: true, updatedAt: true });
 export const insertWorkoutPlanSchema = createInsertSchema(workoutPlans).omit({ id: true, createdAt: true });
 export const insertWorkoutSchema = createInsertSchema(workouts).omit({ id: true });
