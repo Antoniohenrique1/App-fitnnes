@@ -73,8 +73,6 @@ export default function Onboarding() {
           injuries: formData.injuries,
         };
 
-        if (!userData.username || !userData.password || !userData.email || !userData.name) {
-          throw new Error("Por favor, preencha todos os campos obrigatórios (usuário, senha, email e nome).");
         const errors: string[] = [];
 
         if (!userData.username) errors.push("Nome de usuário");
@@ -269,9 +267,8 @@ export default function Onboarding() {
                   ].map((option) => (
                     <Card
                       key={option.value}
-                      className={`p-4 cursor-pointer hover-elevate ${
-                        formData.goal === option.value ? "border-primary" : ""
-                      }`}
+                      className={`p-4 cursor-pointer hover-elevate ${formData.goal === option.value ? "border-primary" : ""
+                        }`}
                       onClick={() => updateFormData("goal", option.value)}
                       data-testid={`card-goal-${option.value}`}
                     >
@@ -328,9 +325,8 @@ export default function Onboarding() {
                       {["3", "4", "5"].map((days) => (
                         <Card
                           key={days}
-                          className={`p-4 cursor-pointer hover-elevate text-center ${
-                            formData.daysPerWeek === days ? "border-primary" : ""
-                          }`}
+                          className={`p-4 cursor-pointer hover-elevate text-center ${formData.daysPerWeek === days ? "border-primary" : ""
+                            }`}
                           onClick={() => updateFormData("daysPerWeek", days)}
                           data-testid={`card-days-${days}`}
                         >
@@ -357,9 +353,8 @@ export default function Onboarding() {
                       ].map((option) => (
                         <Card
                           key={option.value}
-                          className={`p-4 cursor-pointer hover-elevate text-center ${
-                            formData.sessionMinutes === option.value ? "border-primary" : ""
-                          }`}
+                          className={`p-4 cursor-pointer hover-elevate text-center ${formData.sessionMinutes === option.value ? "border-primary" : ""
+                            }`}
                           onClick={() => updateFormData("sessionMinutes", option.value)}
                           data-testid={`card-duration-${option.value}`}
                         >
@@ -496,8 +491,8 @@ export default function Onboarding() {
               <ArrowLeft className="w-4 h-4 mr-2" />
               Voltar
             </Button>
-            <Button 
-              onClick={handleNext} 
+            <Button
+              onClick={handleNext}
               disabled={isSubmitting || authLoading}
               data-testid="button-next"
             >
