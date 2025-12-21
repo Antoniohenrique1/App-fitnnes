@@ -127,7 +127,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const recentCheckIns = await storage.getUserCheckIns(req.session.userId, 7);
 
-      const aiPlan = await generateWorkoutPlan({ user, recentCheckIns });
+      // Add timeout to AI generation (30 seconds)
+      const aiPromise = generateWorkoutPlan({ user, recentCheckIns });
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("AI generation timeout after 30 seconds")), 30000)
+      );
+
+      const aiPlan = await Promise.race([aiPromise, timeoutPromise]);
 
       const plan = await storage.createWorkoutPlan({
         userId: req.session.userId,
