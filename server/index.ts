@@ -68,7 +68,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// FOR VERCEL: Export the app for serverless execution
+// FOR VERCEL/PRODUCTION: Handle registration and static files
+// We export a promise-based app or just the app after registration
+const setupProject = async () => {
+  await registerRoutes(app);
+  if (process.env.NODE_ENV === "production") {
+    serveStatic(app);
+  }
+};
+
+// Execute setup
 if (process.env.NODE_ENV !== "production") {
   (async () => {
     const server = await registerRoutes(app);
@@ -79,9 +88,10 @@ if (process.env.NODE_ENV !== "production") {
     });
   })();
 } else {
-  // Production / Vercel mode
-  registerRoutes(app);
-  serveStatic(app);
+  // In Vercel, routes are registered during the first import
+  setupProject().catch(err => {
+    console.error("Critical: Failed to initialize Agreste Server", err);
+  });
 }
 
 export default app;
