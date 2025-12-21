@@ -43,8 +43,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Registration error:", error.message || error);
       if (error.errors) {
         console.error("Validation errors:", JSON.stringify(error.errors, null, 2));
+        // Return detailed validation errors for debugging
+        return res.status(400).json({
+          error: "Invalid request data",
+          details: error.errors.map((e: any) => ({
+            field: e.path?.join('.') || 'unknown',
+            message: e.message
+          }))
+        });
       }
-      res.status(400).json({ error: "Invalid request data" });
+      res.status(400).json({ error: error.message || "Invalid request data" });
     }
   });
 
