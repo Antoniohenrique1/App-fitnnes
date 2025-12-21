@@ -402,28 +402,28 @@ export default function Onboarding() {
                     <Label>Equipamentos disponíveis</Label>
                     <div className="grid grid-cols-2 gap-3">
                       {[
-                        "Barra",
-                        "Halteres",
-                        "Kettlebell",
-                        "Elásticos",
-                        "TRX",
-                        "Banco",
+                        { id: "barbell", label: "Barra" },
+                        { id: "dumbbells", label: "Halteres" },
+                        { id: "kettlebell", label: "Kettlebell" },
+                        { id: "bands", label: "Elásticos" },
+                        { id: "trx", label: "TRX" },
+                        { id: "bench", label: "Banco" },
                       ].map((equipment) => (
-                        <div key={equipment} className="flex items-center space-x-2">
+                        <div key={equipment.id} className="flex items-center space-x-2">
                           <Checkbox
-                            id={equipment}
-                            checked={formData.equipment.includes(equipment)}
+                            id={equipment.id}
+                            checked={formData.equipment.includes(equipment.id)}
                             onCheckedChange={(checked) => {
                               if (checked) {
-                                updateFormData("equipment", [...formData.equipment, equipment]);
+                                updateFormData("equipment", [...formData.equipment, equipment.id]);
                               } else {
-                                updateFormData("equipment", formData.equipment.filter((e: string) => e !== equipment));
+                                updateFormData("equipment", formData.equipment.filter((e: string) => e !== equipment.id));
                               }
                             }}
-                            data-testid={`checkbox-${equipment.toLowerCase()}`}
+                            data-testid={`checkbox-${equipment.id}`}
                           />
-                          <Label htmlFor={equipment} className="font-normal cursor-pointer">
-                            {equipment}
+                          <Label htmlFor={equipment.id} className="font-normal cursor-pointer">
+                            {equipment.label}
                           </Label>
                         </div>
                       ))}
