@@ -24,19 +24,44 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// User stats (XP, level, streaks, etc.)
+// User stats (XP, level, streaks, gamification)
 export const userStats = pgTable("user_stats", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  // XP and Leveling
   xp: integer("xp").default(0).notNull(),
   level: integer("level").default(1).notNull(),
+  totalXpEarned: integer("total_xp_earned").default(0).notNull(),
+
+  // Rank System (Bronze, Silver, Gold, Platinum, Diamond, Master, Legend)
+  rank: text("rank").default("Bronze").notNull(),
+  prestigeLevel: integer("prestige_level").default(0).notNull(),
+
+  // Streaks
   streak: integer("streak").default(0).notNull(),
   longestStreak: integer("longest_streak").default(0).notNull(),
   streakFreezes: integer("streak_freezes").default(1).notNull(),
   lastWorkoutDate: date("last_workout_date"),
+
+  // Workout Stats
   totalWorkouts: integer("total_workouts").default(0).notNull(),
+  perfectWorkouts: integer("perfect_workouts").default(0).notNull(), // 100% completed
+  personalRecordsBroken: integer("prs_broken").default(0).notNull(),
+
+  // Challenges & Achievements  
+  challengesCompleted: integer("challenges_completed").default(0).notNull(),
+  achievementsUnlocked: integer("achievements_unlocked").default(0).notNull(),
+
+  // Social & Community
+  socialScore: integer("social_score").default(0).notNull(),
+  helpedUsers: integer("helped_users").default(0).notNull(),
+  postsCreated: integer("posts_created").default(0).notNull(),
+
+  // Legacy fields (keeping for compatibility)
   leagueTier: text("league_tier").default("Bronze").notNull(),
   weeklyXP: integer("weekly_xp").default(0).notNull(),
+
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
@@ -131,6 +156,86 @@ export const missions = pgTable("missions", {
   date: date("date").notNull(),
   xpReward: integer("xp_reward").notNull(),
 });
+
+// Achievements System
+export const achievements = pgTable("achievements", {
+  id: varchar("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  icon: text("icon").notNull(),
+  xpReward: integer("xp_reward").notNull(),
+  rarity: text("rarity").notNull(), // common, uncommon, rare, epic, legendary
+  category: text("category").notNull(), // workout, streak, social, challenge, legend
+  requirement: jsonb("requirement").notNull(),
+});
+
+export const userAchievements = pgTable("user_achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  achievementId: varchar("achievement_id").notNull().references(() => achievements.id),
+  unlockedAt: timestamp("unlocked_at").defaultNow().notNull(),
+  progress: integer("progress").default(0).notNull(),
+});
+
+// Challenges System
+export const challenges = pgTable("challenges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(), // daily, weekly, special, community
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  icon: text("icon").notNull(),
+  xpReward: integer("xp_reward").notNull(),
+  coinsReward: integer("coins_reward").default(0).notNull(),
+  difficulty: text("difficulty").notNull(), // easy, medium, hard, extreme
+  rarity: text("rarity").notNull(),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  requirements: jsonb("requirements").notNull(),
+  participantCount: integer("participant_count").default(0).notNull(),
+});
+
+export const userChallenges = pgTable("user_challenges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  challengeId: varchar("challenge_id").notNull().references(() => challenges.id),
+  status: text("status").notNull(), // active, completed, failed, claimed
+  progress: integer("progress").default(0).notNull(),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+// Social Features
+export const posts = pgTable("posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // workout, achievement, milestone, challenge
+  content: text("content"),
+  media: text("media").array(),
+  likes: integer("likes").default(0).notNull(),
+  comments: integer("comments").default(0).notNull(),
+  workoutId: varchar("workout_id"),
+  achievementId: varchar("achievement_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  visibility: text("visibility").default("public").notNull(),
+});
+
+export const follows = pgTable("follows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  followerId: varchar("follower_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  followingId: varchar("following_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const leaderboards = pgTable("leaderboards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(), // global, friends, challenge
+  period: text("period").notNull(), // daily, weekly, monthly, all_time
+  userId: varchar("user_id").notNull().references(() => users.id),
+  rank: integer("rank").notNull(),
+  score: integer("score").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 
 // Zod schemas with improved validation
 export const insertUserSchema = createInsertSchema(users, {
