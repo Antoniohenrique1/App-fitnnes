@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Navbar } from "@/components/Navbar";
 import { AIBubble } from "@/components/premium/AIBubble";
 import { FeaturedChallenges } from "@/components/dashboard/FeaturedChallenges";
+import { getXpForLevel } from "@shared/gamification.js";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
@@ -155,7 +156,7 @@ export default function Dashboard() {
         <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}>
           <Card className="p-1 rounded-2xl bg-gradient-to-r from-white/5 to-transparent border-0 ring-1 ring-white/10">
             <div className="bg-card/50 backdrop-blur-md rounded-xl p-4">
-              <XPBar currentXP={stats?.xp || 0} totalXP={1200} level={stats?.level || 1} />
+              <XPBar currentXP={stats?.xp || 0} totalXP={getXpForLevel((stats?.level || 1) + 1)} level={stats?.level || 1} />
             </div>
           </Card>
         </motion.div>

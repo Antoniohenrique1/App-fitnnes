@@ -1,13 +1,16 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
-import { generateWorkoutPlan, adaptWorkoutForCheckIn } from "./ai.js";
+import { analyzeWorkout, generateWorkoutPlan, adaptWorkoutForCheckIn } from "./ai.js";
 import {
   insertUserSchema,
   insertCheckInSchema,
   workoutExercises,
   insertPostSchema,
-  insertPostCommentSchema
+  insertPostCommentSchema,
+  insertUserSettingsSchema,
+  insertGamificationEventSchema,
+  insertWorkoutSessionSchema
 } from "../shared/schema.js";
 import { db } from "./db.js";
 import {
@@ -17,6 +20,7 @@ import {
   getUserProfileData,
 } from "./social.js";
 import { getEmotionalFeedback } from "./emotional-ai.js";
+import { awardXp } from "./gamification.js";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import "./types.js";
@@ -246,19 +250,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         completed,
       });
 
-      if (completed && load && rpe && rpe <= 3) {
-        const exercise = await db.select().from(workoutExercises).where(eq(workoutExercises.id, workoutExerciseId)).limit(1);
-        if (exercise[0]) {
-          const currentPRs = await storage.getExercisePRHistory(req.session.userId, exercise[0].exerciseName);
-          const maxPR = currentPRs.length > 0 ? Math.max(...currentPRs.map(pr => pr.load)) : 0;
+      if (completed) {
+        await awardXp(req.session.userId, "EXERCISE_SET_COMPLETE");
 
-          if (load > maxPR) {
-            await storage.createPersonalRecord({
-              userId: req.session.userId,
-              exerciseName: exercise[0].exerciseName,
-              load,
-              reps,
-            });
+        if (load && rpe && rpe <= 3) {
+          const exercise = await db.select().from(workoutExercises).where(eq(workoutExercises.id, workoutExerciseId)).limit(1);
+          if (exercise[0]) {
+            const currentPRs = await storage.getExercisePRHistory(req.session.userId, exercise[0].exerciseName);
+            const maxPR = currentPRs.length > 0 ? Math.max(...currentPRs.map(pr => pr.load)) : 0;
+
+            if (load > maxPR) {
+              await storage.createPersonalRecord({
+                userId: req.session.userId,
+                exerciseName: exercise[0].exerciseName,
+                load,
+                reps,
+              });
+              await awardXp(req.session.userId, "PERSONAL_RECORD");
+            }
           }
         }
       }
@@ -294,6 +303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           if (diffDays === 1) {
             newStreak = stats.streak + 1;
+            await awardXp(req.session.userId, "STREAK_INCREMENT");
           } else if (diffDays > 1) {
             newStreak = 1;
           }
@@ -301,18 +311,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           newStreak = 1;
         }
 
-        const xpGain = 50;
-        const coinsGain = 100; // Standard reward for finishing a workout
+        const xpResult = await awardXp(req.session.userId, "WORKOUT_COMPLETE");
+        const coinsGain = 100;
 
         await storage.updateUserStats(req.session.userId, {
-          xp: stats.xp + xpGain,
-          level: Math.floor((stats.xp + xpGain) / 1200) + 1,
           coins: stats.coins + coinsGain,
           streak: newStreak,
           longestStreak: Math.max(newStreak, stats.longestStreak),
           lastWorkoutDate: today,
           totalWorkouts: stats.totalWorkouts + 1,
-          weeklyXP: stats.weeklyXP + xpGain,
         });
 
         if (newStreak === 7) {
@@ -570,6 +577,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error seeding shop items:", seedError);
     }
   })();
+
+  // --- New Architecture API (Phase 1) ---
+
+  // 1. Settings API
+  app.get("/api/settings", async (req, res) => {
+    if (!req.session?.userId) return res.sendStatus(401);
+    const settings = await storage.getUserSettings(req.session.userId);
+    // If no settings exist, return default structure (client should handle null)
+    res.json(settings || {});
+  });
+
+  app.patch("/api/settings", async (req, res) => {
+    if (!req.session?.userId) return res.sendStatus(401);
+    try {
+      // Allow partial updates
+      const data = insertUserSettingsSchema.partial().parse(req.body);
+      const updated = await storage.updateUserSettings(req.session.userId, data);
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: "Invalid settings data", details: e.message });
+    }
+  });
+
+  // 2. Gamification Events (Event Sourcing)
+  app.get("/api/gamification/events", async (req, res) => {
+    if (!req.session?.userId) return res.sendStatus(401);
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+    const events = await storage.getGamificationEvents(req.session.userId, limit);
+    res.json(events);
+  });
+
+  app.post("/api/gamification/events", async (req, res) => {
+    if (!req.session?.userId) return res.sendStatus(401);
+    try {
+      // Force userId from session
+      const data = insertGamificationEventSchema.parse({ ...req.body, userId: req.session.userId });
+      const created = await storage.createGamificationEvent(data);
+      res.status(201).json(created);
+    } catch (e: any) {
+      res.status(400).json({ error: "Invalid event data", details: e.message });
+    }
+  });
+
+  // 3. History (Workout Sessions)
+  app.get("/api/history", async (req, res) => {
+    if (!req.session?.userId) return res.sendStatus(401);
+    const history = await storage.getUserWorkoutSessions(req.session.userId);
+    res.json(history);
+  });
+
+  app.post("/api/history", async (req, res) => {
+    if (!req.session?.userId) return res.sendStatus(401);
+    try {
+      const data = insertWorkoutSessionSchema.parse({ ...req.body, userId: req.session.userId });
+      const created = await storage.createWorkoutSession(data);
+      res.status(201).json(created);
+    } catch (e: any) {
+      res.status(400).json({ error: "Invalid session data", details: e.message });
+    }
+  });
+
+  // 4. AI Analysis (Phase 2)
+  app.post("/api/ai/analyze", async (req, res) => {
+    if (!req.session?.userId) return res.sendStatus(401);
+    try {
+      const user = await storage.getUser(req.session.userId);
+      if (!user) return res.sendStatus(404);
+
+      const analysis = await analyzeWorkout({
+        ...req.body,
+        user
+      });
+      res.json(analysis);
+    } catch (e: any) {
+      res.status(500).json({ error: "Analysis failed", details: e.message });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;

@@ -68,10 +68,31 @@ function Router() {
   );
 }
 
+import { useUserStore } from "@/stores/useUserStore";
+import { useGameStore } from "@/stores/useGameStore";
+import GamificationLayer from "@/components/features/GamificationLayer";
+
+function StoreInitializer() {
+  const { user } = useAuth();
+  const { fetchSettings } = useUserStore();
+  const { fetchEvents } = useGameStore();
+
+  useEffect(() => {
+    if (user) {
+      fetchSettings();
+      fetchEvents();
+    }
+  }, [user]);
+
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <StoreInitializer />
+        <GamificationLayer />
         <TooltipProvider>
           <div className="dark">
             <Toaster />

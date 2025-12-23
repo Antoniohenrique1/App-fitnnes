@@ -401,5 +401,10 @@ export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({ 
 export const insertGamificationEventSchema = createInsertSchema(gamificationEvents).omit({ id: true, createdAt: true });
 export const insertWorkoutSessionSchema = createInsertSchema(workoutSessions).omit({ id: true, startedAt: true });
 
+export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
+export type InsertGamificationEvent = z.infer<typeof insertGamificationEventSchema>;
+export type InsertWorkoutSession = z.infer<typeof insertWorkoutSessionSchema>;
+
+
 // Alias User to Profile types explicitly if needed, but 'type User' above is sufficient.
 export type Profile = typeof profiles.$inferSelect;

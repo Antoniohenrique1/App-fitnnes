@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
+import { getLevelProgress } from "@shared/gamification.js";
 
 interface XPBarProps {
   currentXP: number;
@@ -7,8 +8,9 @@ interface XPBarProps {
   level: number;
 }
 
-export default function XPBar({ currentXP, totalXP, level }: XPBarProps) {
-  const percentage = Math.min((currentXP / totalXP) * 100, 100);
+export default function XPBar({ currentXP, level }: Omit<XPBarProps, 'totalXP'>) {
+  const { xpInCurrentLevel, xpNeededForNextLevel, progress } = getLevelProgress(currentXP);
+  const percentage = progress;
 
   return (
     <div className="relative w-full group cursor-default">
@@ -45,7 +47,7 @@ export default function XPBar({ currentXP, totalXP, level }: XPBarProps) {
         <div className="text-right">
           <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Experience</div>
           <div className="text-sm font-mono font-medium text-white tabular-nums">
-            <span className="text-primary">{currentXP}</span> / {totalXP} XP
+            <span className="text-primary">{xpInCurrentLevel}</span> / {xpNeededForNextLevel} XP
           </div>
         </div>
       </div>

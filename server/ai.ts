@@ -175,3 +175,58 @@ Retorne JSON válido (sem markdown):
     };
   }
 }
+// ... existing exports ...
+
+interface AnalyzeWorkoutRequest {
+  workoutType: string;
+  totalVolume: number; // kg * reps
+  duration: number; // minutes
+  averageFormScore?: number; // 0-100
+  feedbackLog?: string[]; // Log of real-time issues
+  user: User;
+}
+
+export async function analyzeWorkout(request: AnalyzeWorkoutRequest): Promise<{
+  summary: string;
+  formAnalysis: string;
+  tips: string[];
+  score: number;
+}> {
+  const { workoutType, totalVolume, duration, averageFormScore, feedbackLog, user } = request;
+
+  const prompt = `Você é um coach de elite analisando o desempenho de um atleta em um treino de ${workoutType}.
+  
+  DADOS DO TREINO:
+  - Duração: ${duration} min
+  - Volume Total: ${totalVolume} kg
+  - Score de Forma (MoveNet): ${averageFormScore || "N/A"}/100
+  - Feedback em Tempo Real (Log): ${feedbackLog?.join(", ") || "Nenhum problema detectado"}
+  
+  PERFIL DO ATLETA:
+  - Nível: ${user.experience}
+  - Objetivo: ${user.goal}
+  
+  Gere uma análise concisa e motivadora em JSON (sem markdown):
+  {
+    "summary": "Resumo de 1 frase do desempenho (ex: 'Volume brutal, mas cuidado com a forma no final.')",
+    "formAnalysis": "Análise técnica baseada no log de erros. Se log vazio, elogiar consistência.",
+    "tips": ["Dica 1 para próxima vez", "Dica 2 técnica", "Dica 3 recuperação"],
+    "score": 85 (Calcule uma nota de 0-100 considerando volume vs duração e erros de forma)
+  }`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text();
+    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("Gemini Analysis Error:", error);
+    return {
+      summary: "Bom treino! Continue consistente.",
+      formAnalysis: "Não foi possível analisar detalhadamente a forma hoje.",
+      tips: ["Mantenha a hidratação", "Descanse bem"],
+      score: 80
+    };
+  }
+}
