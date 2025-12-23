@@ -11,6 +11,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { PERSONAS, PersonaCard } from "@/components/onboarding/PersonaCard";
 
 export default function Onboarding() {
   const [, setLocation] = useLocation();
@@ -34,9 +35,10 @@ export default function Onboarding() {
     location: "both",
     equipment: [] as string[],
     injuries: "",
+    persona: "mentor" as any,
   });
 
-  const totalSteps = 5;
+  const totalSteps = 6;
   const progress = (step / totalSteps) * 100;
 
   const handleNext = async () => {
@@ -71,6 +73,7 @@ export default function Onboarding() {
           location: formData.location,
           equipment: formData.equipment,
           injuries: formData.injuries,
+          persona: formData.persona,
         };
 
         const errors: string[] = [];
@@ -476,6 +479,26 @@ export default function Onboarding() {
                       </a>
                     </Label>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {step === 6 && (
+              <div className="space-y-6">
+                <div className="text-center mb-8">
+                  <h2 className="text-3xl font-black italic tracking-tighter uppercase mb-2">ESCOLHA SEU <span className="text-primary-main">COACH AI</span></h2>
+                  <p className="text-muted-foreground font-medium uppercase tracking-widest text-[10px]">A personalidade que guiará sua jornada</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {PERSONAS.map((persona) => (
+                    <PersonaCard
+                      key={persona.id}
+                      persona={persona}
+                      selected={formData.persona === persona.id}
+                      onSelect={(id) => setFormData({ ...formData, persona: id })}
+                    />
+                  ))}
                 </div>
               </div>
             )}

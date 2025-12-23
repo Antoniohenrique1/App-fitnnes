@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import WorkoutExerciseCard from "@/components/WorkoutExerciseCard";
-import { TimerIsland } from "@/components/ui/timer-island";
+import { RestTimer } from "@/components/workout/RestTimer";
+import { SuccessCelebration } from "@/components/premium/SuccessCelebration";
 import { ArrowLeft, Clock, Target, Rocket, Dumbbell, Zap, Trophy, Play } from "lucide-react";
 import { Link, useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -23,6 +24,8 @@ export default function WorkoutDetail() {
   // Timer State
   const [timerDuration, setTimerDuration] = useState(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [sessionData, setSessionData] = useState<{ xpGain: number } | null>(null);
 
   const { data, isLoading, refetch, error } = useQuery<{
     workout: Workout;
@@ -56,16 +59,8 @@ export default function WorkoutDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api", "user", "stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api", "workouts", "today"] });
       queryClient.invalidateQueries({ queryKey: ["/api", "missions", "today"] });
-
-      toast({
-        title: "SESSÃO FINALIZADA! 🏆",
-        description: `+${data.xpGain || 50} XP Adicionados ao seu legado.`,
-        className: "bg-primary/20 border-primary text-white backdrop-blur-md",
-      });
-
-      setTimeout(() => {
-        setLocation("/dashboard");
-      }, 1500);
+      setSessionData({ xpGain: data.xpGain || 50 });
+      setShowSuccess(true);
     },
     onError: () => {
       toast({
@@ -99,16 +94,23 @@ export default function WorkoutDetail() {
 
       <AnimatePresence>
         {isTimerActive && (
-          <TimerIsland
-            key={timerDuration}
-            seconds={timerDuration}
-            isActive={isTimerActive}
+          <RestTimer
+            duration={timerDuration}
             onComplete={() => setIsTimerActive(false)}
+          />
+        )}
+        {showSuccess && sessionData && (
+          <SuccessCelebration
+            isOpen={showSuccess}
+            onClose={() => setLocation("/dashboard")}
+            title="SESSÃO FINALIZADA"
+            subtitle="PROTOCOL ALPHA COMPLETED"
+            xpGain={sessionData.xpGain}
           />
         )}
       </AnimatePresence>
 
-      <nav className="sticky top-0 bg-background/80 backdrop-blur-xl z-40 border-b border-white/5">
+      <nav className="sticky top-0 bg-dark-bg/80 backdrop-blur-xl z-40 border-b border-white/5">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/dashboard">
             <Button variant="ghost" size="sm" className="hover:bg-white/10 text-muted-foreground hover:text-white">

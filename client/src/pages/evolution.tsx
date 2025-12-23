@@ -23,9 +23,11 @@ const BADGE_DEFINITIONS = {
   dedicated: { id: "dedicated", title: "Dedicação Total", description: "Complete 100 treinos", icon: "heart" as const, rarity: "legendary" as const },
 };
 
+import { Navbar } from "@/components/Navbar";
+
 export default function Evolution() {
   const { toast } = useToast();
-  
+
   const { data: stats, isLoading: statsLoading, error: statsError } = useQuery<UserStats>({
     queryKey: ["/api", "user", "stats"],
   });
@@ -93,47 +95,18 @@ export default function Evolution() {
   }));
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <nav className="border-b border-border sticky top-0 bg-background/80 backdrop-blur-md z-50">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <div className="flex items-center gap-2">
-              <Play className="w-6 h-6 text-primary" />
-              <span className="text-xl font-bold font-['Outfit']">FitCoach AI</span>
-            </div>
-            <div className="hidden md:flex items-center gap-6">
-              <Link href="/dashboard" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Dashboard</Link>
-              <Link href="/evolution" className="text-sm font-medium hover:text-primary transition-colors">Evolução</Link>
-              <Link href="/leagues" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Ligas</Link>
-              <Link href="/marketplace" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Profissionais</Link>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            {statsLoading ? (
-              <Skeleton className="w-20 h-8" />
-            ) : (
-              <StreakFlame 
-                streak={stats?.streak || 0} 
-                freezeAvailable={(stats?.streakFreezes || 0) > 0} 
-              />
-            )}
-            <Link href="/account">
-              <Button size="icon" variant="ghost" data-testid="button-account">
-                <UserIcon className="w-5 h-5" />
-              </Button>
-            </Link>
-            <Button size="icon" variant="ghost" className="md:hidden" data-testid="button-menu">
-              <Menu className="w-5 h-5" />
-            </Button>
-          </div>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-dark-bg text-white flex flex-col relative overflow-hidden pb-24">
+      {/* Dynamic Background Blurs */}
+      <div className="fixed top-[-10%] left-[-20%] w-[70%] h-[70%] bg-primary-main/5 rounded-full blur-[120px] pointer-events-none" />
+      <div className="fixed bottom-[-10%] right-[-20%] w-[60%] h-[60%] bg-purple-500/5 rounded-full blur-[120px] pointer-events-none" />
 
-      <div className="flex-1 max-w-7xl mx-auto px-4 py-8 w-full space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold font-['Outfit']">Sua Evolução</h1>
-          <p className="text-muted-foreground mt-1">Acompanhe seu progresso e conquistas</p>
-        </div>
+      <Navbar />
+
+      <div className="flex-1 max-w-7xl mx-auto px-4 py-8 w-full space-y-8 z-10">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+          <h1 className="text-4xl font-black italic tracking-tighter uppercase">SUA <span className="text-primary-main">EVOLUÇÃO</span></h1>
+          <p className="text-sm text-muted-foreground font-bold mt-2 uppercase tracking-widest">Acompanhe cada gota de suor transformada em resultado</p>
+        </motion.div>
 
         <Tabs defaultValue="overview" className="space-y-6">
           <TabsList>
@@ -165,8 +138,8 @@ export default function Evolution() {
                   <AreaChart data={rpeData}>
                     <defs>
                       <linearGradient id="colorRpe" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -235,7 +208,7 @@ export default function Evolution() {
                     .filter(pr => pr.exerciseName === exerciseName)
                     .sort((a, b) => new Date(a.achievedAt).getTime() - new Date(b.achievedAt).getTime())
                     .slice(-8);
-                  
+
                   const sparklineData = exercisePRs.map((pr, index) => ({
                     week: index + 1,
                     value: pr.load,

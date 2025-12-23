@@ -2,8 +2,21 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import { generateWorkoutPlan, adaptWorkoutForCheckIn } from "./ai.js";
-import { insertUserSchema, insertCheckInSchema, workoutExercises } from "../shared/schema.js";
+import {
+  insertUserSchema,
+  insertCheckInSchema,
+  workoutExercises,
+  insertPostSchema,
+  insertPostCommentSchema
+} from "../shared/schema.js";
 import { db } from "./db.js";
+import {
+  addComment,
+  toggleFollow,
+  getLeaderboard,
+  getUserProfileData,
+} from "./social.js";
+import { getEmotionalFeedback } from "./emotional-ai.js";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import "./types.js";
@@ -289,9 +302,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const xpGain = 50;
+        const coinsGain = 100; // Standard reward for finishing a workout
+
         await storage.updateUserStats(req.session.userId, {
           xp: stats.xp + xpGain,
           level: Math.floor((stats.xp + xpGain) / 1200) + 1,
+          coins: stats.coins + coinsGain,
           streak: newStreak,
           longestStreak: Math.max(newStreak, stats.longestStreak),
           lastWorkoutDate: today,
@@ -305,9 +321,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (stats.totalWorkouts + 1 === 30) {
           await storage.awardBadge(req.session.userId, "workouts_30");
         }
+
+        // Create social post for workout completion
+        try {
+          await createPost(req.session.userId, {
+            type: "workout",
+            content: `Mais um treino finalizado! Protocolo concluído com sucesso. 🔥 #Foco #Evolução`,
+            workoutId: req.params.id,
+            visibility: "public"
+          });
+        } catch (postError) {
+          console.error("Error creating social post:", postError);
+        }
       }
 
-      res.json({ workout, xpGain: 50 });
+      res.json({ workout, xpGain: 50, coinsGain: 100 });
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }
@@ -381,11 +409,167 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(badges);
   });
 
-  // League routes
-  app.get("/api/leagues/:tier", async (req, res) => {
-    const members = await storage.getLeagueMembers(req.params.tier, 10);
-    res.json(members);
+  // Social Feed routes
+  app.get("/api/social/feed", async (req, res) => {
+    if (!req.session?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const feed = await getFeed(req.session.userId, limit, offset);
+    res.json(feed);
   });
+
+  app.post("/api/social/posts", async (req, res) => {
+    if (!req.session?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    try {
+      const postData = insertPostSchema.parse(req.body);
+      const post = await createPost(req.session.userId, postData as any);
+      res.json(post);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/social/posts/:id/like", async (req, res) => {
+    if (!req.session?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const result = await toggleLike(req.session.userId, req.params.id);
+    res.json(result);
+  });
+
+  app.post("/api/social/posts/:id/comment", async (req, res) => {
+    if (!req.session?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    try {
+      const { content } = req.body;
+      const comment = await addComment(req.session.userId, req.params.id, content);
+      res.json(comment);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Following routes
+  app.post("/api/social/follow/:userId", async (req, res) => {
+    if (!req.session?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    try {
+      const result = await toggleFollow(req.session.userId, req.params.userId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Profile and Economy
+  app.get("/api/users/:id/profile", async (req, res) => {
+    try {
+      const profileData = await getUserProfileData(req.params.id);
+      res.json(profileData);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/users/profile", async (req, res) => {
+    try {
+      if (!req.session?.userId) return res.status(401).json({ error: "Not authenticated" });
+      const { bio, avatarUrl } = req.body;
+      const updatedUser = await storage.updateUser(req.session.userId, { bio, avatarUrl });
+      res.json(updatedUser);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/shop/items", async (_req, res) => {
+    try {
+      const items = await storage.getShopItems();
+      res.json(items);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/shop/purchase", async (req, res) => {
+    try {
+      if (!req.session?.userId) return res.status(401).json({ error: "Not authenticated" });
+      const { itemId, currency } = req.body;
+      const result = await storage.purchaseItem(req.session.userId, itemId, currency);
+      if (!result.success) return res.status(400).json(result);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/inventory", async (req, res) => {
+    try {
+      if (!req.session?.userId) return res.status(401).json({ error: "Not authenticated" });
+      const inventory = await storage.getUserInventory(req.session.userId);
+      res.json(inventory);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/inventory/:id/equip", async (req, res) => {
+    try {
+      if (!req.session?.userId) return res.status(401).json({ error: "Not authenticated" });
+      const updated = await storage.equipItem(req.session.userId, req.params.id);
+      if (!updated) return res.status(404).json({ error: "Item not found" });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Leaderboard routes
+  app.get("/api/social/leaderboard", async (req, res) => {
+    const type = (req.query.type as "global" | "friends") || "global";
+    const period = (req.query.period as "weekly" | "all_time") || "weekly";
+    const userId = req.session?.userId;
+    const leaderboard = await getLeaderboard(type, period, userId);
+    res.json(leaderboard);
+  });
+
+  // AI Feedback route
+  app.get("/api/ai/feedback", async (req, res) => {
+    if (!req.session?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const feedback = await getEmotionalFeedback(req.session.userId);
+    res.json(feedback);
+  });
+
+  // Seed shop items if empty
+  (async () => {
+    try {
+      const items = await storage.getShopItems();
+      if (items.length === 0) {
+        const defaultItems = [
+          { name: "Gelo de Ofensiva", description: "Protege sua ofensiva por 24h caso você perca um dia de treino.", priceCoins: 500, priceGems: 0, type: "streak_freeze", rarity: "rare", icon: "Snowflake" },
+          { name: "Poção de XP (1.5x)", description: "Aumenta o XP ganho em 50% por 1 hora.", priceCoins: 250, priceGems: 0, type: "booster", rarity: "uncommon", icon: "Zap" },
+          { name: "Título: A Lenda", description: "Um título exclusivo exibido no seu perfil.", priceCoins: 1000, priceGems: 10, type: "title", rarity: "legendary", icon: "Crown" },
+          { name: "Avatar Cyberpunk", description: "Uma moldura futurista para o seu avatar.", priceCoins: 0, priceGems: 50, type: "skin", rarity: "epic", icon: "UserCircle" },
+          { name: "Aura Neon", description: "Um efeito visual brilhante para o seu perfil.", priceCoins: 750, priceGems: 5, type: "skin", rarity: "rare", icon: "Sparkles" },
+        ];
+
+        for (const item of defaultItems) {
+          await storage.createShopItem(item);
+        }
+        console.log("Shop items seeded successfully.");
+      }
+    } catch (seedError) {
+      console.error("Error seeding shop items:", seedError);
+    }
+  })();
 
   const httpServer = createServer(app);
   return httpServer;

@@ -20,6 +20,10 @@ import { useToast } from "@/hooks/use-toast";
 import type { UserStats, Workout, Mission } from "@shared/schema";
 import { motion, AnimatePresence } from "framer-motion";
 
+import { Navbar } from "@/components/Navbar";
+import { AIBubble } from "@/components/premium/AIBubble";
+import { FeaturedChallenges } from "@/components/dashboard/FeaturedChallenges";
+
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const [checkinOpen, setCheckinOpen] = useState(false);
@@ -39,7 +43,7 @@ export default function Dashboard() {
   const { data: todayWorkoutData, isLoading: workoutLoading, error: workoutError } = useQuery<{
     workout: Workout | null;
     exercises: Array<{
-      id: number;
+      id: string;
       name: string;
       sets: number;
       repsMin: number;
@@ -52,6 +56,11 @@ export default function Dashboard() {
 
   const { data: missions = [], isLoading: missionsLoading, error: missionsError } = useQuery<Mission[]>({
     queryKey: ["/api", "missions", "today"],
+  });
+
+  const { data: feedback } = useQuery<any>({
+    queryKey: ["/api", "ai", "feedback"],
+    staleTime: 1000 * 60 * 10, // 10 minutes
   });
 
   useEffect(() => {
@@ -87,11 +96,13 @@ export default function Dashboard() {
   const triggerFakeLevelUp = () => setShowLevelUp(true);
 
   return (
-    <div className="min-h-screen bg-transparent flex flex-col relative overflow-hidden pb-20">
+    <div className="min-h-screen bg-dark-bg text-white flex flex-col relative overflow-hidden pb-24">
 
       {/* Dynamic Background Blurs */}
-      <div className="fixed top-[-10%] left-[-20%] w-[70%] h-[70%] bg-primary/10 rounded-full blur-[150px] pointer-events-none animate-pulse-glow" />
-      <div className="fixed bottom-[-10%] right-[-20%] w-[60%] h-[60%] bg-secondary/10 rounded-full blur-[150px] pointer-events-none animate-pulse-glow" style={{ animationDelay: '1.5s' }} />
+      <div className="fixed top-[-10%] left-[-20%] w-[70%] h-[70%] bg-primary-main/5 rounded-full blur-[120px] pointer-events-none animate-pulse-glow" />
+      <div className="fixed bottom-[-10%] right-[-20%] w-[60%] h-[60%] bg-secondary/5 rounded-full blur-[120px] pointer-events-none animate-pulse-glow" style={{ animationDelay: '1.5s' }} />
+
+      <Navbar />
 
       <AnimatePresence>
         {isMatrixLoading && <MatrixLoader onComplete={onMatrixComplete} />}
@@ -104,48 +115,41 @@ export default function Dashboard() {
         onClose={() => setShowLevelUp(false)}
       />
 
-      {/* HEADER */}
-      <nav className="sticky top-0 z-40 px-4 py-4 bg-background/80 backdrop-blur-xl border-b border-white/5">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <Link href="/dashboard">
-            <div className="flex items-center gap-2 group cursor-pointer">
-              <div className="bg-primary/20 p-2 rounded-xl group-hover:bg-primary/30 transition-colors">
-                <Zap className="w-5 h-5 text-primary fill-current" />
-              </div>
-              <span className="text-2xl font-black font-['Outfit'] tracking-tighter italic uppercase text-white">
-                Agreste<span className="text-primary">.AI</span>
-              </span>
-            </div>
-          </Link>
-
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-2 bg-white/5 rounded-full px-3 py-1 border border-white/5">
-              <StreakFlame streak={stats?.streak || 0} freezeAvailable={(stats?.streakFreezes || 0) > 0} />
-            </div>
-            <Link href="/account">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-white/10 to-transparent border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer">
-                <UserIcon className="w-5 h-5 text-white" />
-              </div>
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      <div className="flex-1 max-w-7xl mx-auto px-4 w-full space-y-6 pt-6 z-10">
+      <div className="flex-1 max-w-7xl mx-auto px-4 w-full space-y-8 pt-8 z-10">
 
         {/* WELCOME SECTION */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-between items-end">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="flex flex-col md:flex-row md:items-end justify-between gap-4"
+        >
           <div>
-            <h1 className="text-3xl font-bold font-['Outfit'] text-white">
-              Bom dia, <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Lenda</span>
+            <h1 className="text-4xl font-black font-['Outfit'] tracking-tighter italic uppercase leading-none">
+              BOM DIA, <span className="text-primary-main">LENDA</span>
             </h1>
-            <p className="text-sm text-muted-foreground font-medium">Foco de hoje: <span className="text-white">Costas & Bíceps</span></p>
+            <p className="text-sm text-muted-foreground font-bold mt-2 flex items-center gap-2">
+              <Calendar size={14} className="text-primary-main" /> FOCO DE HOJE: <span className="text-white uppercase tracking-wider">Costas & Bíceps</span>
+            </p>
           </div>
-          <StreakFlame streak={stats?.streak || 0} freezeAvailable={false} className="md:hidden" />
         </motion.div>
 
         {/* PANIC PANEL - Now simpler and cleaner */}
         <PanicPanel />
+
+        {/* AI FEEDBACK - NOW PROMINENT AT TOP */}
+        {feedback && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.05 }}
+          >
+            <AIBubble
+              message={feedback.message}
+              persona={feedback.persona}
+              personaName={feedback.personaName}
+            />
+          </motion.div>
+        )}
 
         {/* XP BAR CARD */}
         <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}>
@@ -262,14 +266,20 @@ export default function Dashboard() {
 
             {/* QUICK ACTIONS */}
             <div className="grid grid-cols-2 gap-3 mt-4">
-              <Button variant="outline" className="h-12 border-white/10 bg-white/5 hover:bg-white/10 hover:border-primary/50 hover:text-primary transition-all rounded-xl">
-                <Users className="w-4 h-4 mr-2" /> Comunidade
-              </Button>
-              <Button variant="outline" className="h-12 border-white/10 bg-white/5 hover:bg-white/10 hover:border-accent/50 hover:text-accent transition-all rounded-xl">
-                <TrendingUp className="w-4 h-4 mr-2" /> Ranking
-              </Button>
+              <Link href="/community">
+                <Button variant="outline" className="w-full h-12 border-white/10 bg-white/5 hover:bg-white/10 hover:border-primary/50 hover:text-primary transition-all rounded-xl">
+                  <Users className="w-4 h-4 mr-2" /> Comunidade
+                </Button>
+              </Link>
+              <Link href="/community">
+                <Button variant="outline" className="w-full h-12 border-white/10 bg-white/5 hover:bg-white/10 hover:border-accent/50 hover:text-accent transition-all rounded-xl">
+                  <TrendingUp className="w-4 h-4 mr-2" /> Ranking
+                </Button>
+              </Link>
             </div>
 
+            {/* FEATURED CHALLENGES */}
+            <FeaturedChallenges />
           </motion.div>
         </div>
       </div>

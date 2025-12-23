@@ -22,6 +22,9 @@ export const users = pgTable("users", {
   equipment: text("equipment").array(),
   injuries: text("injuries"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  persona: text("persona").default("mentor").notNull(),
+  bio: text("bio"),
+  avatarUrl: text("avatar_url"),
 });
 
 // User stats (XP, level, streaks, gamification)
@@ -37,6 +40,10 @@ export const userStats = pgTable("user_stats", {
   // Rank System (Bronze, Silver, Gold, Platinum, Diamond, Master, Legend)
   rank: text("rank").default("Bronze").notNull(),
   prestigeLevel: integer("prestige_level").default(0).notNull(),
+
+  // Economy
+  coins: integer("coins").default(0).notNull(),
+  gems: integer("gems").default(0).notNull(),
 
   // Streaks
   streak: integer("streak").default(0).notNull(),
@@ -236,6 +243,44 @@ export const leaderboards = pgTable("leaderboards", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Shop System
+export const shopItems = pgTable("shop_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  priceCoins: integer("price_coins").default(0).notNull(),
+  priceGems: integer("price_gems").default(0).notNull(),
+  type: text("type").notNull(), // skin, booster, streak_freeze, badge, title
+  rarity: text("rarity").default("common").notNull(),
+  icon: text("icon").notNull(),
+  metadata: jsonb("metadata").default({}).notNull(),
+});
+
+export const userInventory = pgTable("user_inventory", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  itemId: varchar("item_id").notNull().references(() => shopItems.id, { onDelete: "cascade" }),
+  quantity: integer("quantity").default(1).notNull(),
+  equipped: boolean("equipped").default(false).notNull(),
+  acquiredAt: timestamp("acquired_at").defaultNow().notNull(),
+});
+
+export const postLikes = pgTable("post_likes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const postComments = pgTable("post_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  likes: integer("likes").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 
 // Zod schemas with improved validation
 export const insertUserSchema = createInsertSchema(users, {
@@ -261,6 +306,9 @@ export const insertUserSchema = createInsertSchema(users, {
   // Array fields
   equipment: z.array(z.string()).nullable().optional().default([]),
   injuries: z.string().nullable().optional(),
+  persona: z.enum(["sergeant", "mentor", "scientist", "zen"]).default("mentor"),
+  bio: z.string().max(300, "Bio must be less than 300 characters").nullable().optional(),
+  avatarUrl: z.string().url("Invalid avatar URL").nullable().optional(),
 }).omit({ id: true, createdAt: true });
 
 export const insertUserStatsSchema = createInsertSchema(userStats).omit({ id: true, updatedAt: true });
@@ -272,6 +320,13 @@ export const insertCheckInSchema = createInsertSchema(checkIns).omit({ id: true,
 export const insertPersonalRecordSchema = createInsertSchema(personalRecords).omit({ id: true, achievedAt: true });
 export const insertUserBadgeSchema = createInsertSchema(userBadges).omit({ id: true, earnedAt: true });
 export const insertMissionSchema = createInsertSchema(missions).omit({ id: true });
+export const insertPostSchema = createInsertSchema(posts).omit({ id: true, createdAt: true });
+export const insertFollowSchema = createInsertSchema(follows).omit({ id: true, createdAt: true });
+export const insertLeaderboardSchema = createInsertSchema(leaderboards).omit({ id: true, updatedAt: true });
+export const insertPostLikeSchema = createInsertSchema(postLikes).omit({ id: true, createdAt: true });
+export const insertPostCommentSchema = createInsertSchema(postComments).omit({ id: true, createdAt: true });
+export const insertShopItemSchema = createInsertSchema(shopItems).omit({ id: true });
+export const insertUserInventorySchema = createInsertSchema(userInventory).omit({ id: true, acquiredAt: true });
 
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -285,3 +340,10 @@ export type CheckIn = typeof checkIns.$inferSelect;
 export type PersonalRecord = typeof personalRecords.$inferSelect;
 export type UserBadge = typeof userBadges.$inferSelect;
 export type Mission = typeof missions.$inferSelect;
+export type Post = typeof posts.$inferSelect;
+export type Follow = typeof follows.$inferSelect;
+export type Leaderboard = typeof leaderboards.$inferSelect;
+export type PostLike = typeof postLikes.$inferSelect;
+export type PostComment = typeof postComments.$inferSelect;
+export type ShopItem = typeof shopItems.$inferSelect;
+export type UserInventory = typeof userInventory.$inferSelect;

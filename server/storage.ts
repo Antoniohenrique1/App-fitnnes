@@ -22,6 +22,8 @@ import {
   personalRecords,
   userBadges,
   missions,
+  shopItems,
+  userInventory,
 } from "../shared/schema.js";
 
 export interface IStorage {
@@ -79,6 +81,14 @@ export interface IStorage {
 
   // League operations
   getLeagueMembers(tier: string, limit?: number): Promise<Array<{ userId: string; username: string; name: string; weeklyXP: number; rank: number }>>;
+
+  // Shop & Inventory operations
+  getShopItems(): Promise<ShopItem[]>;
+  getShopItem(id: string): Promise<ShopItem | undefined>;
+  getUserInventory(userId: string): Promise<Array<UserInventory & { item: ShopItem }>>;
+  purchaseItem(userId: string, itemId: string, currency: 'coins' | 'gems'): Promise<{ success: boolean; message: string }>;
+  equipItem(userId: string, inventoryItemId: string): Promise<UserInventory | undefined>;
+  createShopItem(item: any): Promise<ShopItem>;
 }
 
 export class DbStorage implements IStorage {
@@ -271,6 +281,82 @@ export class DbStorage implements IStorage {
       rank: index + 1,
     }));
   }
+
+  // Shop & Inventory operations
+  async getShopItems(): Promise<ShopItem[]> {
+    return db.select().from(shopItems);
+  }
+
+  async getShopItem(id: string): Promise<ShopItem | undefined> {
+    const [item] = await db.select().from(shopItems).where(eq(shopItems.id, id));
+    return item;
+  }
+
+  async getUserInventory(userId: string): Promise<Array<UserInventory & { item: ShopItem }>> {
+    const results = await db
+      .select({
+        inventory: userInventory,
+        item: shopItems,
+      })
+      .from(userInventory)
+      .innerJoin(shopItems, eq(userInventory.itemId, shopItems.id))
+      .where(eq(userInventory.userId, userId));
+
+    return results.map(r => ({ ...r.inventory, item: r.item }));
+  }
+
+  async purchaseItem(userId: string, itemId: string, currency: 'coins' | 'gems'): Promise<{ success: boolean; message: string }> {
+    const item = await this.getShopItem(itemId);
+    if (!item) return { success: false, message: "Item not found" };
+
+    const stats = await this.getUserStats(userId);
+    if (!stats) return { success: false, message: "User stats not found" };
+
+    const price = currency === 'coins' ? item.priceCoins : item.priceGems;
+    const balance = currency === 'coins' ? stats.coins : stats.gems;
+
+    if (balance < price) {
+      return { success: false, message: `Insufficient ${currency}` };
+    }
+
+    // Deduct currency
+    await this.updateUserStats(userId, {
+      [currency]: balance - price,
+    });
+
+    // Add to inventory
+    const [existing] = await db.select().from(userInventory).where(and(eq(userInventory.userId, userId), eq(userInventory.itemId, itemId)));
+    if (existing) {
+      await db.update(userInventory).set({ quantity: existing.quantity + 1 }).where(eq(userInventory.id, existing.id));
+    } else {
+      await db.insert(userInventory).values({ userId, itemId, quantity: 1 });
+    }
+
+    return { success: true, message: "Purchase successful" };
+  }
+
+  async equipItem(userId: string, inventoryItemId: string): Promise<UserInventory | undefined> {
+    const [item] = await db.select().from(userInventory).where(and(eq(userInventory.id, inventoryItemId), eq(userInventory.userId, userId)));
+    if (!item) return undefined;
+
+    // Get item type to unequip others of same type
+    const shopItem = await this.getShopItem(item.itemId);
+    if (shopItem) {
+      const userItems = await this.getUserInventory(userId);
+      const sameTypeItems = userItems.filter(ui => ui.item.type === shopItem.type && ui.id !== inventoryItemId);
+      for (const st of sameTypeItems) {
+        await db.update(userInventory).set({ equipped: false }).where(eq(userInventory.id, st.id));
+      }
+    }
+
+    const [updated] = await db.update(userInventory).set({ equipped: !item.equipped }).where(eq(userInventory.id, inventoryItemId)).returning();
+    return updated;
+  }
+
+  async createShopItem(item: any): Promise<ShopItem> {
+    const [newItem] = await db.insert(shopItems).values(item).returning();
+    return newItem;
+  }
 }
 
 export class MemStorage implements IStorage {
@@ -284,6 +370,8 @@ export class MemStorage implements IStorage {
   private personalRecords: Map<string, PersonalRecord>;
   private userBadges: Map<string, UserBadge>;
   private missions: Map<string, Mission>;
+  private shopItems: Map<string, ShopItem>;
+  private userInventory: Map<string, UserInventory>;
   private currentId: number;
 
   constructor() {
@@ -297,6 +385,8 @@ export class MemStorage implements IStorage {
     this.personalRecords = new Map();
     this.userBadges = new Map();
     this.missions = new Map();
+    this.shopItems = new Map();
+    this.userInventory = new Map();
     this.currentId = 1;
   }
 
@@ -347,6 +437,8 @@ export class MemStorage implements IStorage {
       totalWorkouts: 0,
       leagueTier: "Bronze",
       weeklyXP: 0,
+      coins: 0,
+      gems: 0,
       updatedAt: new Date()
     };
     this.userStats.set(id, stats);
@@ -574,6 +666,71 @@ export class MemStorage implements IStorage {
       .slice(0, limit);
 
     return members.map((m, i) => ({ ...m, rank: i + 1 }));
+  }
+
+  // Shop & Inventory operations
+  async getShopItems(): Promise<ShopItem[]> {
+    return Array.from(this.shopItems.values());
+  }
+
+  async getShopItem(id: string): Promise<ShopItem | undefined> {
+    return this.shopItems.get(id);
+  }
+
+  async getUserInventory(userId: string): Promise<Array<UserInventory & { item: ShopItem }>> {
+    return Array.from(this.userInventory.values())
+      .filter(i => i.userId === userId)
+      .map(i => ({ ...i, item: this.shopItems.get(i.itemId)! }));
+  }
+
+  async purchaseItem(userId: string, itemId: string, currency: 'coins' | 'gems'): Promise<{ success: boolean; message: string }> {
+    const item = this.shopItems.get(itemId);
+    if (!item) return { success: false, message: "Item not found" };
+
+    const stats = await this.getUserStats(userId);
+    if (!stats) return { success: false, message: "User stats not found" };
+
+    const price = currency === 'coins' ? item.priceCoins : item.priceGems;
+    const balance = currency === 'coins' ? stats.coins : stats.gems;
+
+    if (balance < price) return { success: false, message: `Insufficient ${currency}` };
+
+    await this.updateUserStats(userId, { [currency]: balance - price });
+
+    const existing = Array.from(this.userInventory.values()).find(i => i.userId === userId && i.itemId === itemId);
+    if (existing) {
+      existing.quantity += 1;
+    } else {
+      const id = this.nextId();
+      this.userInventory.set(id, { id, userId, itemId, quantity: 1, equipped: false, acquiredAt: new Date() });
+    }
+
+    return { success: true, message: "Purchase successful" };
+  }
+
+  async equipItem(userId: string, inventoryItemId: string): Promise<UserInventory | undefined> {
+    const item = this.userInventory.get(inventoryItemId);
+    if (!item || item.userId !== userId) return undefined;
+
+    const shopItem = this.shopItems.get(item.itemId);
+    if (shopItem) {
+      Array.from(this.userInventory.values())
+        .filter(ui => ui.userId === userId && ui.id !== inventoryItemId)
+        .forEach(ui => {
+          const si = this.shopItems.get(ui.itemId);
+          if (si && si.type === shopItem.type) ui.equipped = false;
+        });
+    }
+
+    item.equipped = !item.equipped;
+    return item;
+  }
+
+  async createShopItem(item: any): Promise<ShopItem> {
+    const id = this.nextId();
+    const newItem = { id, metadata: {}, ...item } as ShopItem;
+    this.shopItems.set(id, newItem);
+    return newItem;
   }
 }
 

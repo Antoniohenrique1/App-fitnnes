@@ -4,15 +4,19 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { lazy, Suspense } from "react";
 import Landing from "@/pages/landing";
-import Onboarding from "@/pages/onboarding";
-import Dashboard from "@/pages/dashboard";
-import Evolution from "@/pages/evolution";
-import Leagues from "@/pages/leagues";
-import Marketplace from "@/pages/marketplace";
-import Account from "@/pages/account";
-import WorkoutDetail from "@/pages/workout-detail";
+const Onboarding = lazy(() => import("@/pages/onboarding"));
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const Evolution = lazy(() => import("@/pages/evolution"));
+const Community = lazy(() => import("@/pages/community"));
+const Shop = lazy(() => import("@/pages/shop"));
+const Profile = lazy(() => import("@/pages/profile"));
+const WorkoutDetail = lazy(() => import("@/pages/workout-detail"));
 import NotFound from "@/pages/not-found";
+import { MatrixLoader } from "@/components/ui/matrix-loader";
+import { trackEvent } from "@/lib/analytics";
+import { useEffect } from "react";
 
 function ProtectedRoute({ component: Component, path }: { component: React.ComponentType; path: string }) {
   const { user, isLoading } = useAuth();
@@ -44,14 +48,17 @@ function Router() {
       <Route path="/evolution">
         {() => <ProtectedRoute component={Evolution} path="/evolution" />}
       </Route>
-      <Route path="/leagues">
-        {() => <ProtectedRoute component={Leagues} path="/leagues" />}
+      <Route path="/community">
+        {() => <ProtectedRoute component={Community} path="/community" />}
       </Route>
-      <Route path="/marketplace">
-        {() => <ProtectedRoute component={Marketplace} path="/marketplace" />}
+      <Route path="/shop">
+        {() => <ProtectedRoute component={Shop} path="/shop" />}
       </Route>
-      <Route path="/account">
-        {() => <ProtectedRoute component={Account} path="/account" />}
+      <Route path="/profile">
+        {() => <ProtectedRoute component={Profile} path="/profile" />}
+      </Route>
+      <Route path="/profile/:id">
+        {() => <ProtectedRoute component={Profile} path="/profile/:id" />}
       </Route>
       <Route path="/workout/:id">
         {() => <ProtectedRoute component={WorkoutDetail} path="/workout/:id" />}
@@ -68,7 +75,18 @@ function App() {
         <TooltipProvider>
           <div className="dark">
             <Toaster />
-            <Router />
+            <Suspense fallback={
+              <div className="min-h-screen bg-dark-bg flex items-center justify-center p-8">
+                <div className="w-full max-w-sm">
+                  <MatrixLoader onComplete={() => { }} />
+                  <p className="text-center text-primary-main text-[10px] font-black uppercase tracking-[0.5em] mt-4 animate-pulse">
+                    Otimizando Protocolos...
+                  </p>
+                </div>
+              </div>
+            }>
+              <Router />
+            </Suspense>
           </div>
         </TooltipProvider>
       </AuthProvider>
