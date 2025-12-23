@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Heatmap from "@/components/Heatmap";
 import PRSparkline from "@/components/PRSparkline";
-import BadgeGrid from "@/components/BadgeGrid";
+import { BadgeGrid } from "@/components/BadgeGrid";
 import { Play, Menu, User as UserIcon, Calendar, TrendingUp, Award } from "lucide-react";
 import { Link } from "wouter";
 import StreakFlame from "@/components/StreakFlame";
