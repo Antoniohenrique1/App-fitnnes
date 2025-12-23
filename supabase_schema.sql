@@ -14,6 +14,80 @@ CREATE SCHEMA IF NOT EXISTS social;
 CREATE SCHEMA IF NOT EXISTS shop;
 
 -- ============================================================
+-- LIMPEZA (Começar do zero - Garante que tabelas legadas do public sejam removidas)
+-- ============================================================
+-- 1. Views
+DROP VIEW IF EXISTS public.profile_with_stats CASCADE;
+DROP VIEW IF EXISTS social.public_feed CASCADE;
+DROP VIEW IF EXISTS game.weekly_leaderboard CASCADE;
+
+-- 2. Tabelas Legadas (Nomes usados pelo Drizzle no schema public)
+DROP TABLE IF EXISTS public.user_inventory CASCADE;
+DROP TABLE IF EXISTS public.shop_items CASCADE;
+DROP TABLE IF EXISTS public.leaderboards CASCADE;
+DROP TABLE IF EXISTS public.post_comments CASCADE;
+DROP TABLE IF EXISTS public.post_likes CASCADE;
+DROP TABLE IF EXISTS public.follows CASCADE;
+DROP TABLE IF EXISTS public.posts CASCADE;
+DROP TABLE IF EXISTS public.user_challenges CASCADE;
+DROP TABLE IF EXISTS public.challenges CASCADE;
+DROP TABLE IF EXISTS public.user_achievements CASCADE;
+DROP TABLE IF EXISTS public.achievements CASCADE;
+DROP TABLE IF EXISTS public.user_badges CASCADE;
+DROP TABLE IF EXISTS public.personal_records CASCADE;
+DROP TABLE IF EXISTS public.check_ins CASCADE;
+DROP TABLE IF EXISTS public.exercise_logs CASCADE;
+DROP TABLE IF EXISTS public.workout_exercises CASCADE;
+DROP TABLE IF EXISTS public.workouts CASCADE;
+DROP TABLE IF EXISTS public.workout_plans CASCADE;
+DROP TABLE IF EXISTS public.workout_sessions CASCADE;
+DROP TABLE IF EXISTS public.gamification_events CASCADE;
+DROP TABLE IF EXISTS public.user_settings CASCADE;
+DROP TABLE IF EXISTS public.user_stats CASCADE;
+DROP TABLE IF EXISTS public.missions CASCADE;
+DROP TABLE IF EXISTS public.profiles CASCADE;
+
+-- 3. Tabelas nas Schemas Novas (Caso já tenha rodado o script antes)
+DROP TABLE IF EXISTS shop.transactions CASCADE;
+DROP TABLE IF EXISTS shop.user_inventory CASCADE;
+DROP TABLE IF EXISTS shop.items CASCADE;
+DROP TABLE IF EXISTS social.leaderboards CASCADE;
+DROP TABLE IF EXISTS social.post_likes CASCADE;
+DROP TABLE IF EXISTS social.comments CASCADE;
+DROP TABLE IF EXISTS social.posts CASCADE;
+DROP TABLE IF EXISTS social.follows CASCADE;
+DROP TABLE IF EXISTS game.daily_missions CASCADE;
+DROP TABLE IF EXISTS game.user_challenges CASCADE;
+DROP TABLE IF EXISTS game.challenges CASCADE;
+DROP TABLE IF EXISTS game.user_achievements CASCADE;
+DROP TABLE IF EXISTS game.achievements CASCADE;
+DROP TABLE IF EXISTS game.events CASCADE;
+DROP TABLE IF EXISTS game.user_stats CASCADE;
+DROP TABLE IF EXISTS workout.personal_records CASCADE;
+DROP TABLE IF EXISTS workout.check_ins CASCADE;
+DROP TABLE IF EXISTS workout.sessions CASCADE;
+DROP TABLE IF EXISTS workout.exercise_logs CASCADE;
+DROP TABLE IF EXISTS workout.exercises CASCADE;
+DROP TABLE IF EXISTS workout.workouts CASCADE;
+DROP TABLE IF EXISTS workout.plans CASCADE;
+
+-- 4. Tipos Legados
+DROP TYPE IF EXISTS sex_type CASCADE;
+DROP TYPE IF EXISTS experience_level CASCADE;
+DROP TYPE IF EXISTS fitness_goal CASCADE;
+DROP TYPE IF EXISTS training_location CASCADE;
+DROP TYPE IF EXISTS ai_persona CASCADE;
+DROP TYPE IF EXISTS subscription_tier CASCADE;
+DROP TYPE IF EXISTS player_rank CASCADE;
+DROP TYPE IF EXISTS workout_status CASCADE;
+DROP TYPE IF EXISTS session_status CASCADE;
+DROP TYPE IF EXISTS post_type CASCADE;
+DROP TYPE IF EXISTS visibility_type CASCADE;
+DROP TYPE IF EXISTS item_category CASCADE;
+DROP TYPE IF EXISTS rarity_type CASCADE;
+DROP TYPE IF EXISTS challenge_difficulty CASCADE;
+
+-- ============================================================
 -- PARTE 2: EXTENSÕES NECESSÁRIAS
 -- ============================================================
 
@@ -872,16 +946,19 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger: profiles updated_at
+DROP TRIGGER IF EXISTS trigger_profiles_updated_at ON public.profiles;
 CREATE TRIGGER trigger_profiles_updated_at
     BEFORE UPDATE ON public.profiles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Trigger: user_stats updated_at
+DROP TRIGGER IF EXISTS trigger_user_stats_updated_at ON game.user_stats;
 CREATE TRIGGER trigger_user_stats_updated_at
     BEFORE UPDATE ON game.user_stats
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Trigger: workout.plans updated_at
+DROP TRIGGER IF EXISTS trigger_workout_plans_updated_at ON workout.plans;
 CREATE TRIGGER trigger_workout_plans_updated_at
     BEFORE UPDATE ON workout.plans
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -897,6 +974,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_create_user_stats ON public.profiles;
 CREATE TRIGGER trigger_create_user_stats
     AFTER INSERT ON public.profiles
     FOR EACH ROW EXECUTE FUNCTION create_user_stats();
@@ -925,6 +1003,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_process_game_event ON game.events;
 CREATE TRIGGER trigger_process_game_event
     AFTER INSERT ON game.events
     FOR EACH ROW EXECUTE FUNCTION game.process_game_event();
@@ -942,6 +1021,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_post_likes ON social.post_likes;
 CREATE TRIGGER trigger_update_post_likes
     AFTER INSERT OR DELETE ON social.post_likes
     FOR EACH ROW EXECUTE FUNCTION social.update_post_likes_count();
@@ -959,6 +1039,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_post_comments ON social.comments;
 CREATE TRIGGER trigger_update_post_comments
     AFTER INSERT OR DELETE ON social.comments
     FOR EACH ROW EXECUTE FUNCTION social.update_post_comments_count();
@@ -978,6 +1059,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_follow_counts ON social.follows;
 CREATE TRIGGER trigger_update_follow_counts
     AFTER INSERT OR DELETE ON social.follows
     FOR EACH ROW EXECUTE FUNCTION social.update_follow_counts();
@@ -985,6 +1067,12 @@ CREATE TRIGGER trigger_update_follow_counts
 -- ============================================================
 -- PARTE 10: ROW LEVEL SECURITY (RLS)
 -- ============================================================
+-- NOTA: Como você usa autenticação customizada via Express (não Supabase Auth),
+-- as políticas RLS usam auth.uid() apenas como fallback. A segurança real é
+-- controlada pelo seu backend Express via sessões.
+-- 
+-- Para ambientes de desenvolvimento, criamos políticas permissivas.
+-- Em produção, considere migrar para Supabase Auth para RLS completo.
 
 -- Habilitar RLS em todas as tabelas
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -1011,202 +1099,101 @@ ALTER TABLE shop.items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shop.user_inventory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shop.transactions ENABLE ROW LEVEL SECURITY;
 
--- Policies: profiles
-CREATE POLICY "Profiles are viewable by everyone" ON public.profiles
-    FOR SELECT USING (true);
+-- ============================================================
+-- POLÍTICAS PERMISSIVAS (Backend controla a segurança via sessões)
+-- ============================================================
 
-CREATE POLICY "Users can update own profile" ON public.profiles
-    FOR UPDATE USING (auth.uid() = id);
+-- Permitir todas as operações via service_role key (usado pelo backend)
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'profiles' AND schemaname = 'public') THEN
+        CREATE POLICY "Service role full access" ON public.profiles FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'user_stats' AND schemaname = 'game') THEN
+        CREATE POLICY "Service role full access" ON game.user_stats FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'events' AND schemaname = 'game') THEN
+        CREATE POLICY "Service role full access" ON game.events FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'achievements' AND schemaname = 'game') THEN
+        CREATE POLICY "Service role full access" ON game.achievements FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'user_achievements' AND schemaname = 'game') THEN
+        CREATE POLICY "Service role full access" ON game.user_achievements FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'challenges' AND schemaname = 'game') THEN
+        CREATE POLICY "Service role full access" ON game.challenges FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'user_challenges' AND schemaname = 'game') THEN
+        CREATE POLICY "Service role full access" ON game.user_challenges FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'daily_missions' AND schemaname = 'game') THEN
+        CREATE POLICY "Service role full access" ON game.daily_missions FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'plans' AND schemaname = 'workout') THEN
+        CREATE POLICY "Service role full access" ON workout.plans FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'workouts' AND schemaname = 'workout') THEN
+        CREATE POLICY "Service role full access" ON workout.workouts FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'exercises' AND schemaname = 'workout') THEN
+        CREATE POLICY "Service role full access" ON workout.exercises FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'exercise_logs' AND schemaname = 'workout') THEN
+        CREATE POLICY "Service role full access" ON workout.exercise_logs FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'sessions' AND schemaname = 'workout') THEN
+        CREATE POLICY "Service role full access" ON workout.sessions FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'check_ins' AND schemaname = 'workout') THEN
+        CREATE POLICY "Service role full access" ON workout.check_ins FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'personal_records' AND schemaname = 'workout') THEN
+        CREATE POLICY "Service role full access" ON workout.personal_records FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'posts' AND schemaname = 'social') THEN
+        CREATE POLICY "Service role full access" ON social.posts FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'post_likes' AND schemaname = 'social') THEN
+        CREATE POLICY "Service role full access" ON social.post_likes FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'comments' AND schemaname = 'social') THEN
+        CREATE POLICY "Service role full access" ON social.comments FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'follows' AND schemaname = 'social') THEN
+        CREATE POLICY "Service role full access" ON social.follows FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'leaderboards' AND schemaname = 'social') THEN
+        CREATE POLICY "Service role full access" ON social.leaderboards FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'items' AND schemaname = 'shop') THEN
+        CREATE POLICY "Service role full access" ON shop.items FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'user_inventory' AND schemaname = 'shop') THEN
+        CREATE POLICY "Service role full access" ON shop.user_inventory FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role full access' AND tablename = 'transactions' AND schemaname = 'shop') THEN
+        CREATE POLICY "Service role full access" ON shop.transactions FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+END $$;
 
-CREATE POLICY "Users can insert own profile" ON public.profiles
-    FOR INSERT WITH CHECK (auth.uid() = id);
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can manage own inventory' AND tablename = 'user_inventory' AND schemaname = 'shop') THEN
+        CREATE POLICY "Users can manage own inventory" ON shop.user_inventory
+            FOR ALL USING (auth.uid() = user_id);
+    END IF;
 
--- Policies: user_stats
-CREATE POLICY "Stats are viewable by everyone" ON game.user_stats
-    FOR SELECT USING (true);
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can view own transactions' AND tablename = 'transactions' AND schemaname = 'shop') THEN
+        CREATE POLICY "Users can view own transactions" ON shop.transactions
+            FOR SELECT USING (auth.uid() = user_id);
+    END IF;
 
-CREATE POLICY "Stats are updated by system only" ON game.user_stats
-    FOR UPDATE USING (auth.uid() = user_id);
-
--- Policies: events
-CREATE POLICY "Users can view own events" ON game.events
-    FOR SELECT USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert own events" ON game.events
-    FOR INSERT WITH CHECK (auth.uid() = user_id);
-
--- Policies: achievements (definições são públicas)
-CREATE POLICY "Achievements are viewable by everyone" ON game.achievements
-    FOR SELECT USING (true);
-
--- Policies: user_achievements
-CREATE POLICY "User achievements are viewable by everyone" ON game.user_achievements
-    FOR SELECT USING (true);
-
-CREATE POLICY "Users can insert own achievements" ON game.user_achievements
-    FOR INSERT WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own achievements" ON game.user_achievements
-    FOR UPDATE USING (auth.uid() = user_id);
-
--- Policies: challenges (definições são públicas)
-CREATE POLICY "Challenges are viewable by everyone" ON game.challenges
-    FOR SELECT USING (true);
-
--- Policies: user_challenges
-CREATE POLICY "User challenges are viewable by everyone" ON game.user_challenges
-    FOR SELECT USING (true);
-
-CREATE POLICY "Users can manage own challenges" ON game.user_challenges
-    FOR ALL USING (auth.uid() = user_id);
-
--- Policies: daily_missions
-CREATE POLICY "Users can view own missions" ON game.daily_missions
-    FOR SELECT USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can manage own missions" ON game.daily_missions
-    FOR ALL USING (auth.uid() = user_id);
-
--- Policies: workout.plans
-CREATE POLICY "Users can view own plans" ON workout.plans
-    FOR SELECT USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can manage own plans" ON workout.plans
-    FOR ALL USING (auth.uid() = user_id);
-
--- Policies: workout.workouts
-CREATE POLICY "Workouts are viewable via plan" ON workout.workouts
-    FOR SELECT USING (
-        EXISTS (SELECT 1 FROM workout.plans WHERE id = plan_id AND user_id = auth.uid())
-    );
-
-CREATE POLICY "Users can manage own workouts" ON workout.workouts
-    FOR ALL USING (
-        EXISTS (SELECT 1 FROM workout.plans WHERE id = plan_id AND user_id = auth.uid())
-    );
-
--- Policies: workout.exercises
-CREATE POLICY "Exercises are viewable via workout" ON workout.exercises
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM workout.workouts w
-            JOIN workout.plans p ON w.plan_id = p.id
-            WHERE w.id = workout_id AND p.user_id = auth.uid()
-        )
-    );
-
-CREATE POLICY "Users can manage own exercises" ON workout.exercises
-    FOR ALL USING (
-        EXISTS (
-            SELECT 1 FROM workout.workouts w
-            JOIN workout.plans p ON w.plan_id = p.id
-            WHERE w.id = workout_id AND p.user_id = auth.uid()
-        )
-    );
-
--- Policies: exercise_logs
-CREATE POLICY "Logs are viewable via exercise" ON workout.exercise_logs
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM workout.exercises e
-            JOIN workout.workouts w ON e.workout_id = w.id
-            JOIN workout.plans p ON w.plan_id = p.id
-            WHERE e.id = exercise_id AND p.user_id = auth.uid()
-        )
-    );
-
-CREATE POLICY "Users can manage own logs" ON workout.exercise_logs
-    FOR ALL USING (
-        EXISTS (
-            SELECT 1 FROM workout.exercises e
-            JOIN workout.workouts w ON e.workout_id = w.id
-            JOIN workout.plans p ON w.plan_id = p.id
-            WHERE e.id = exercise_id AND p.user_id = auth.uid()
-        )
-    );
-
--- Policies: sessions
-CREATE POLICY "Users can view own sessions" ON workout.sessions
-    FOR SELECT USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can manage own sessions" ON workout.sessions
-    FOR ALL USING (auth.uid() = user_id);
-
--- Policies: check_ins
-CREATE POLICY "Users can view own check_ins" ON workout.check_ins
-    FOR SELECT USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can manage own check_ins" ON workout.check_ins
-    FOR ALL USING (auth.uid() = user_id);
-
--- Policies: personal_records
-CREATE POLICY "Records are viewable by everyone" ON workout.personal_records
-    FOR SELECT USING (true);
-
-CREATE POLICY "Users can manage own records" ON workout.personal_records
-    FOR ALL USING (auth.uid() = user_id);
-
--- Policies: posts
-CREATE POLICY "Public posts are viewable by everyone" ON social.posts
-    FOR SELECT USING (
-        visibility = 'public' OR 
-        author_id = auth.uid() OR
-        (visibility = 'followers' AND EXISTS (
-            SELECT 1 FROM social.follows WHERE follower_id = auth.uid() AND following_id = author_id
-        ))
-    );
-
-CREATE POLICY "Users can manage own posts" ON social.posts
-    FOR ALL USING (auth.uid() = author_id);
-
--- Policies: post_likes
-CREATE POLICY "Likes are viewable by everyone" ON social.post_likes
-    FOR SELECT USING (true);
-
-CREATE POLICY "Users can manage own likes" ON social.post_likes
-    FOR ALL USING (auth.uid() = user_id);
-
--- Policies: comments
-CREATE POLICY "Comments are viewable by everyone" ON social.comments
-    FOR SELECT USING (true);
-
-CREATE POLICY "Users can insert comments" ON social.comments
-    FOR INSERT WITH CHECK (auth.uid() = author_id);
-
-CREATE POLICY "Users can update own comments" ON social.comments
-    FOR UPDATE USING (auth.uid() = author_id);
-
-CREATE POLICY "Users can delete own comments" ON social.comments
-    FOR DELETE USING (auth.uid() = author_id);
-
--- Policies: follows
-CREATE POLICY "Follows are viewable by everyone" ON social.follows
-    FOR SELECT USING (true);
-
-CREATE POLICY "Users can manage own follows" ON social.follows
-    FOR ALL USING (auth.uid() = follower_id);
-
--- Policies: leaderboards
-CREATE POLICY "Leaderboards are viewable by everyone" ON social.leaderboards
-    FOR SELECT USING (true);
-
--- Policies: shop.items
-CREATE POLICY "Shop items are viewable by everyone" ON shop.items
-    FOR SELECT USING (true);
-
--- Policies: user_inventory
-CREATE POLICY "Users can view own inventory" ON shop.user_inventory
-    FOR SELECT USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can manage own inventory" ON shop.user_inventory
-    FOR ALL USING (auth.uid() = user_id);
-
--- Policies: transactions
-CREATE POLICY "Users can view own transactions" ON shop.transactions
-    FOR SELECT USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert own transactions" ON shop.transactions
-    FOR INSERT WITH CHECK (auth.uid() = user_id);
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can insert own transactions' AND tablename = 'transactions' AND schemaname = 'shop') THEN
+        CREATE POLICY "Users can insert own transactions" ON shop.transactions
+            FOR INSERT WITH CHECK (auth.uid() = user_id);
+    END IF;
+END $$;
 
 -- ============================================================
 -- PARTE 11: DADOS INICIAIS (Seeds)

@@ -1,31 +1,51 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, real, jsonb, date } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, real, jsonb, date, pgSchema, decimal, smallint } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Profiles table (formerly users, extended for Supabase Auth style)
+// Schemas
+export const gameSchema = pgSchema("game");
+export const workoutSchema = pgSchema("workout");
+export const socialSchema = pgSchema("social");
+export const shopSchema = pgSchema("shop");
+
+// Profiles table (public schema)
 export const profiles = pgTable("profiles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), // In production, this links to auth.users.id
   username: text("username").notNull().unique(),
-  password: text("password").notNull(), // Legacy/Local auth. In Supabase, this is handled by Auth.
-  name: text("name").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  name: text("full_name").notNull(),
   email: text("email").notNull().unique(),
-  age: integer("age"),
+  dateOfBirth: date("date_of_birth"),
   sex: text("sex"),
-  height: integer("height"),
-  weight: real("weight"),
-  experience: text("experience"),
-  goal: text("goal"),
-  daysPerWeek: integer("days_per_week"),
-  sessionMinutes: integer("session_minutes"),
-  location: text("location"),
-  equipment: text("equipment").array(),
-  injuries: text("injuries"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  persona: text("persona").default("mentor").notNull(),
+  height: integer("height_cm"),
+  weight: real("weight_kg"),
+  bodyFat: real("body_fat_percentage"),
+  experience: text("experience_level"),
+  primaryGoal: text("primary_goal"),
+  secondaryGoal: text("secondary_goal"),
+  trainingDays: integer("training_days_per_week"),
+  sessionMinutes: integer("session_duration_minutes"),
+  preferredLocation: text("preferred_location"),
+  availableEquipment: text("available_equipment").array(),
+  injuries: text("injuries_notes"),
+  persona: text("ai_persona").default("mentor").notNull(),
+  aiLanguage: text("ai_language").default("pt-BR").notNull(),
   bio: text("bio"),
   avatarUrl: text("avatar_url"),
-  currentPlan: text("current_plan").default("free").notNull(), // free, pro, legend
+  subscriptionTier: text("subscription_tier").default("free").notNull(),
+  subscriptionStartedAt: timestamp("subscription_started_at"),
+  subscriptionExpiresAt: timestamp("subscription_expires_at"),
+  stripeCustomerId: text("stripe_customer_id"),
+  theme: text("theme").default("dark").notNull(),
+  audioEnabled: boolean("audio_enabled").default(true).notNull(),
+  hapticsEnabled: boolean("haptics_enabled").default(true).notNull(),
+  notificationsPush: boolean("notifications_push").default(true).notNull(),
+  notificationsEmail: boolean("notifications_email").default(false).notNull(),
+  privacyMode: text("privacy_mode").default("public").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  lastSeenAt: timestamp("last_seen_at").defaultNow(),
 });
 
 // Alias for backward compatibility during refactor
@@ -44,98 +64,73 @@ export const userSettings = pgTable("user_settings", {
 });
 
 // Workout Sessions (Detailed tracking)
-export const workoutSessions = pgTable("workout_sessions", {
+export const workoutSessions = workoutSchema.table("sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
-  workoutId: varchar("workout_id"), // Can be null if free workout
+  workoutId: varchar("workout_id"),
   startedAt: timestamp("started_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
-  status: text("status").default("in_progress").notNull(), // in_progress, completed, abandoned
+  status: text("status").default("active").notNull(), // active, completed, abandoned
   caloriesBurned: integer("calories_burned"),
-  accuracyScore: integer("accuracy_score"), // From AI
-  feedback: text("feedback"), // AI Feedback
-  rawStats: jsonb("raw_stats"), // Detailed logs
+  accuracyScore: integer("accuracy_score"),
+  feedback: text("feedback"),
+  rawStats: jsonb("raw_stats"),
 });
 
-// Gamification Events (Event Sourcing)
-export const gamificationEvents = pgTable("gamification_events", {
+// Gamification Events
+export const gamificationEvents = gameSchema.table("events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
-  type: text("type").notNull(), // workout_complete, level_up, badge_earned, streak_milestone
+  type: text("type").notNull(),
   xpEarned: integer("xp_earned").default(0).notNull(),
   metadata: jsonb("metadata").default({}).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // User stats (XP, level, streaks, gamification)
-export const userStats = pgTable("user_stats", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
-
-  // XP and Leveling
-  xp: integer("xp").default(0).notNull(),
-  level: integer("level").default(1).notNull(),
-  totalXpEarned: integer("total_xp_earned").default(0).notNull(),
-
-  // Rank System (Bronze, Silver, Gold, Platinum, Diamond, Master, Legend)
+export const userStats = gameSchema.table("user_stats", {
+  userId: varchar("user_id").primaryKey().references(() => profiles.id, { onDelete: "cascade" }),
+  totalXp: integer("total_xp").default(0).notNull(),
+  currentLevel: integer("current_level").default(1).notNull(),
+  xpToNextLevel: integer("xp_to_next_level").default(100).notNull(),
   rank: text("rank").default("Bronze").notNull(),
   prestigeLevel: integer("prestige_level").default(0).notNull(),
-
-  // Economy
   coins: integer("coins").default(0).notNull(),
   gems: integer("gems").default(0).notNull(),
-
-  // Streaks
-  streak: integer("streak").default(0).notNull(),
+  currentStreak: integer("current_streak").default(0).notNull(),
   longestStreak: integer("longest_streak").default(0).notNull(),
-  streakFreezes: integer("streak_freezes").default(1).notNull(),
-  lastWorkoutDate: date("last_workout_date"),
-
-  // Workout Stats
+  streakFreezes: integer("streak_freezes_available").default(1).notNull(),
   totalWorkouts: integer("total_workouts").default(0).notNull(),
-  perfectWorkouts: integer("perfect_workouts").default(0).notNull(), // 100% completed
-  personalRecordsBroken: integer("prs_broken").default(0).notNull(),
-
-  // Challenges & Achievements  
-  challengesCompleted: integer("challenges_completed").default(0).notNull(),
+  perfectWorkouts: integer("perfect_workouts").default(0).notNull(),
+  prsBroken: integer("personal_records_broken").default(0).notNull(),
   achievementsUnlocked: integer("achievements_unlocked").default(0).notNull(),
-
-  // Social & Community
-  socialScore: integer("social_score").default(0).notNull(),
-  helpedUsers: integer("helped_users").default(0).notNull(),
-  postsCreated: integer("posts_created").default(0).notNull(),
-
-  // Legacy fields (keeping for compatibility)
-  leagueTier: text("league_tier").default("Bronze").notNull(),
-  weeklyXP: integer("weekly_xp").default(0).notNull(),
-
+  challengesCompleted: integer("challenges_completed").default(0).notNull(),
+  followersCount: integer("followers_count").default(0).notNull(),
+  followingCount: integer("following_count").default(0).notNull(),
+  postsCount: integer("posts_count").default(0).notNull(),
+  weeklyXp: integer("weekly_xp").default(0).notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Workout plans (generated by AI)
-export const workoutPlans = pgTable("workout_plans", {
+// Workout plans
+export const workoutPlans = workoutSchema.table("plans", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description"),
-  weekCount: integer("week_count").default(4).notNull(),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Individual workouts within a plan
-export const workouts = pgTable("workouts", {
+// Individual workouts
+export const workouts = workoutSchema.table("workouts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   planId: varchar("plan_id").notNull().references(() => workoutPlans.id, { onDelete: "cascade" }),
-  weekNumber: integer("week_number").notNull(),
+  weekNumber: integer("week_number").notNull().default(1),
   dayNumber: integer("day_number").notNull(),
   focus: text("focus").notNull(),
-  duration: integer("duration").notNull(),
-  scheduledDate: date("scheduled_date"),
-  completed: boolean("completed").default(false).notNull(),
+  status: text("status").default("pending").notNull(),
   completedAt: timestamp("completed_at"),
-  isAiGenerated: boolean("is_ai_generated").default(false),
-  aiPrompt: text("ai_prompt"),
 });
 
 // Exercises in each workout
@@ -184,227 +179,183 @@ export const personalRecords = pgTable("personal_records", {
   achievedAt: timestamp("achieved_at").defaultNow().notNull(),
 });
 
-// Badges/achievements
-export const userBadges = pgTable("user_badges", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  badgeId: text("badge_id").notNull(),
-  earnedAt: timestamp("earned_at").defaultNow().notNull(),
-});
-
-// Missions
-export const missions = pgTable("missions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  type: text("type").notNull(),
-  title: text("title").notNull(),
-  description: text("description").notNull(),
-  target: integer("target").notNull(),
-  progress: integer("progress").default(0).notNull(),
-  completed: boolean("completed").default(false).notNull(),
-  date: date("date").notNull(),
-  xpReward: integer("xp_reward").notNull(),
-});
-
 // Achievements System
-export const achievements = pgTable("achievements", {
+export const achievements = gameSchema.table("achievements", {
   id: varchar("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description").notNull(),
   icon: text("icon").notNull(),
+  category: text("category").notNull(),
+  rarity: text("rarity").notNull(),
   xpReward: integer("xp_reward").notNull(),
-  rarity: text("rarity").notNull(), // common, uncommon, rare, epic, legendary
-  category: text("category").notNull(), // workout, streak, social, challenge, legend
-  requirement: jsonb("requirement").notNull(),
+  coinsReward: integer("coins_reward").default(0).notNull(),
 });
 
-export const userAchievements = pgTable("user_achievements", {
+export const userAchievements = gameSchema.table("user_achievements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
   achievementId: varchar("achievement_id").notNull().references(() => achievements.id),
   unlockedAt: timestamp("unlocked_at").defaultNow().notNull(),
-  progress: integer("progress").default(0).notNull(),
 });
 
 // Challenges System
-export const challenges = pgTable("challenges", {
+export const challenges = gameSchema.table("challenges", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  type: text("type").notNull(), // daily, weekly, special, community
+  type: text("type").notNull(),
   title: text("title").notNull(),
   description: text("description").notNull(),
-  icon: text("icon").notNull(),
+  icon: text("icon"),
   xpReward: integer("xp_reward").notNull(),
   coinsReward: integer("coins_reward").default(0).notNull(),
-  difficulty: text("difficulty").notNull(), // easy, medium, hard, extreme
+  difficulty: text("difficulty").notNull(),
   rarity: text("rarity").notNull(),
-  startDate: timestamp("start_date").notNull(),
-  endDate: timestamp("end_date").notNull(),
-  requirements: jsonb("requirements").notNull(),
-  participantCount: integer("participant_count").default(0).notNull(),
+  startsAt: timestamp("starts_at").notNull(),
+  endsAt: timestamp("ends_at").notNull(),
+  requirements: jsonb("requirements"),
 });
 
-export const userChallenges = pgTable("user_challenges", {
+export const userChallenges = gameSchema.table("user_challenges", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
   challengeId: varchar("challenge_id").notNull().references(() => challenges.id),
-  status: text("status").notNull(), // active, completed, failed, claimed
+  status: text("status").notNull(),
   progress: integer("progress").default(0).notNull(),
   joinedAt: timestamp("joined_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
+  claimedAt: timestamp("claimed_at"),
 });
 
 // Social Features
-export const posts = pgTable("posts", {
+export const posts = socialSchema.table("posts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  type: text("type").notNull(), // workout, achievement, milestone, challenge
+  authorId: varchar("author_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
   content: text("content"),
-  media: text("media").array(),
-  likes: integer("likes").default(0).notNull(),
-  comments: integer("comments").default(0).notNull(),
-  workoutId: varchar("workout_id"),
-  achievementId: varchar("achievement_id"),
+  likesCount: integer("likes_count").default(0).notNull(),
+  commentsCount: integer("comments_count").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   visibility: text("visibility").default("public").notNull(),
 });
 
-export const follows = pgTable("follows", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  followerId: varchar("follower_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  followingId: varchar("following_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+export const follows = socialSchema.table("follows", {
+  followerId: varchar("follower_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  followingId: varchar("following_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const leaderboards = pgTable("leaderboards", {
+export const leaderboards = socialSchema.table("leaderboards", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  type: text("type").notNull(), // global, friends, challenge
-  period: text("period").notNull(), // daily, weekly, monthly, all_time
-  userId: varchar("user_id").notNull().references(() => users.id),
-  rank: integer("rank").notNull(),
+  type: text("type").notNull(),
+  period: text("period").notNull(),
+  userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  rankPosition: integer("rank_position").notNull(),
   score: integer("score").notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // Shop System
-export const shopItems = pgTable("shop_items", {
+export const shopItems = shopSchema.table("items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
   description: text("description").notNull(),
   priceCoins: integer("price_coins").default(0).notNull(),
   priceGems: integer("price_gems").default(0).notNull(),
-  type: text("type").notNull(), // skin, booster, streak_freeze, badge, title
-  rarity: text("rarity").default("common").notNull(),
+  category: text("category").notNull(),
+  rarity: text("rarity").notNull(),
   icon: text("icon").notNull(),
-  metadata: jsonb("metadata").default({}).notNull(),
 });
 
-export const userInventory = pgTable("user_inventory", {
+export const userInventory = shopSchema.table("user_inventory", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
   itemId: varchar("item_id").notNull().references(() => shopItems.id, { onDelete: "cascade" }),
   quantity: integer("quantity").default(1).notNull(),
-  equipped: boolean("equipped").default(false).notNull(),
+  isEquipped: boolean("is_equipped").default(false).notNull(),
   acquiredAt: timestamp("acquired_at").defaultNow().notNull(),
 });
 
-export const postLikes = pgTable("post_likes", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const postLikes = socialSchema.table("post_likes", {
   postId: varchar("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const postComments = pgTable("post_comments", {
+export const postComments = socialSchema.table("comments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   postId: varchar("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  authorId: varchar("author_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
   content: text("content").notNull(),
-  likes: integer("likes").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 
 // Zod schemas with improved validation
-export const insertUserSchema = createInsertSchema(users, {
-  // Required fields with validation
-  username: z.string().min(3, "Username must be at least 3 characters").max(50),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+export const insertUserSchema = createInsertSchema(profiles, {
+  username: z.string().min(3, "Username must be at least 3 characters").max(30),
+  passwordHash: z.string(),
   email: z.string().email("Invalid email format"),
   name: z.string().min(1, "Name is required").max(100),
-
-  // Optional numeric fields with coercion and validation
-  age: z.coerce.number().int().min(10, "Age must be at least 10").max(120, "Age must be less than 120").nullable().optional(),
-  height: z.coerce.number().int().min(100, "Height must be at least 100cm").max(250, "Height must be less than 250cm").nullable().optional(),
-  weight: z.coerce.number().min(30, "Weight must be at least 30kg").max(300, "Weight must be less than 300kg").nullable().optional(),
-  daysPerWeek: z.coerce.number().int().min(1).max(7).nullable().optional(),
+  dateOfBirth: z.string().nullable().optional(), // Expected as ISO string or YYYY-MM-DD
+  height: z.coerce.number().int().min(100).max(250).nullable().optional(),
+  weight: z.coerce.number().min(30).max(300).nullable().optional(),
+  trainingDays: z.coerce.number().int().min(1).max(7).nullable().optional(),
   sessionMinutes: z.coerce.number().int().min(15).max(180).nullable().optional(),
+  persona: z.enum(["sergeant", "mentor", "scientist", "zen", "legend"]).default("mentor"),
+  bio: z.string().max(500).nullable().optional(),
+  avatarUrl: z.string().url().nullable().optional(),
+}).omit({ id: true, createdAt: true, updatedAt: true, lastSeenAt: true });
 
-  // Optional text fields
-  sex: z.enum(["male", "female"]).nullable().optional(),
-  experience: z.enum(["beginner", "intermediate", "advanced"]).nullable().optional(),
-  goal: z.enum(["fat_loss", "hypertrophy", "strength", "conditioning"]).nullable().optional(),
-  location: z.enum(["home", "gym", "both"]).nullable().optional(),
+export const registerUserSchema = z.object({
+  username: z.string().min(3),
+  password: z.string().min(6),
+  email: z.string().email(),
+  name: z.string().min(1),
+});
 
-  // Array fields
-  equipment: z.array(z.string()).nullable().optional().default([]),
-  injuries: z.string().nullable().optional(),
-  persona: z.enum(["sergeant", "mentor", "scientist", "zen"]).default("mentor"),
-  bio: z.string().max(300, "Bio must be less than 300 characters").nullable().optional(),
-  avatarUrl: z.string().url("Invalid avatar URL").nullable().optional(),
-}).omit({ id: true, createdAt: true });
-
-export const insertUserStatsSchema = createInsertSchema(userStats).omit({ id: true, updatedAt: true });
+export const insertUserStatsSchema = createInsertSchema(userStats).omit({ updatedAt: true });
 export const insertWorkoutPlanSchema = createInsertSchema(workoutPlans).omit({ id: true, createdAt: true });
 export const insertWorkoutSchema = createInsertSchema(workouts).omit({ id: true });
 export const insertWorkoutExerciseSchema = createInsertSchema(workoutExercises).omit({ id: true });
 export const insertExerciseLogSchema = createInsertSchema(exerciseLogs).omit({ id: true, createdAt: true });
 export const insertCheckInSchema = createInsertSchema(checkIns).omit({ id: true, createdAt: true });
 export const insertPersonalRecordSchema = createInsertSchema(personalRecords).omit({ id: true, achievedAt: true });
-export const insertUserBadgeSchema = createInsertSchema(userBadges).omit({ id: true, earnedAt: true });
-export const insertMissionSchema = createInsertSchema(missions).omit({ id: true });
+export const insertAchievementSchema = createInsertSchema(achievements);
+export const insertUserAchievementSchema = createInsertSchema(userAchievements).omit({ id: true, unlockedAt: true });
+export const insertChallengeSchema = createInsertSchema(challenges).omit({ id: true });
+export const insertUserChallengeSchema = createInsertSchema(userChallenges).omit({ id: true, joinedAt: true });
 export const insertPostSchema = createInsertSchema(posts).omit({ id: true, createdAt: true });
-export const insertFollowSchema = createInsertSchema(follows).omit({ id: true, createdAt: true });
+export const insertFollowSchema = createInsertSchema(follows).omit({ createdAt: true });
 export const insertLeaderboardSchema = createInsertSchema(leaderboards).omit({ id: true, updatedAt: true });
-export const insertPostLikeSchema = createInsertSchema(postLikes).omit({ id: true, createdAt: true });
+export const insertPostLikeSchema = createInsertSchema(postLikes).omit({ createdAt: true });
 export const insertPostCommentSchema = createInsertSchema(postComments).omit({ id: true, createdAt: true });
 export const insertShopItemSchema = createInsertSchema(shopItems).omit({ id: true });
 export const insertUserInventorySchema = createInsertSchema(userInventory).omit({ id: true, acquiredAt: true });
 
 // Types
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export type Profile = typeof profiles.$inferSelect;
+export type InsertProfile = z.infer<typeof insertUserSchema>;
+export type User = Profile; // Backward compatibility
+
 export type UserStats = typeof userStats.$inferSelect;
+export type InsertUserStats = z.infer<typeof insertUserStatsSchema>;
+
 export type WorkoutPlan = typeof workoutPlans.$inferSelect;
 export type Workout = typeof workouts.$inferSelect;
 export type WorkoutExercise = typeof workoutExercises.$inferSelect;
 export type ExerciseLog = typeof exerciseLogs.$inferSelect;
-export type CheckIn = typeof checkIns.$inferSelect;
-export type PersonalRecord = typeof personalRecords.$inferSelect;
-export type UserBadge = typeof userBadges.$inferSelect;
-export type Mission = typeof missions.$inferSelect;
+export type WorkoutSession = typeof workoutSessions.$inferSelect;
+export type InsertWorkoutSession = z.infer<typeof insertWorkoutSessionSchema>;
+
+export type GamificationEvent = typeof gamificationEvents.$inferSelect;
+export type InsertGamificationEvent = z.infer<typeof insertGamificationEventSchema>;
+
 export type Post = typeof posts.$inferSelect;
-export type Follow = typeof follows.$inferSelect;
-export type Leaderboard = typeof leaderboards.$inferSelect;
-export type PostLike = typeof postLikes.$inferSelect;
-export type PostComment = typeof postComments.$inferSelect;
-// Shop & Inventory
+export type InsertPost = z.infer<typeof insertPostSchema>;
+
 export type ShopItem = typeof shopItems.$inferSelect;
 export type UserInventory = typeof userInventory.$inferSelect;
 
-// New Architecture Types
-export type UserSettings = typeof userSettings.$inferSelect;
-export type GamificationEvent = typeof gamificationEvents.$inferSelect;
-export type WorkoutSession = typeof workoutSessions.$inferSelect;
-
-// New Zod Schemas
-export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({ id: true, updatedAt: true });
-export const insertGamificationEventSchema = createInsertSchema(gamificationEvents).omit({ id: true, createdAt: true });
-export const insertWorkoutSessionSchema = createInsertSchema(workoutSessions).omit({ id: true, startedAt: true });
-
-export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
-export type InsertGamificationEvent = z.infer<typeof insertGamificationEventSchema>;
-export type InsertWorkoutSession = z.infer<typeof insertWorkoutSessionSchema>;
-
-
-// Alias User to Profile types explicitly if needed, but 'type User' above is sufficient.
-export type Profile = typeof profiles.$inferSelect;
+// Alias for unified settings/profile access
+export type UserSettings = Profile;
+export const insertUserSettingsSchema = insertUserSchema;

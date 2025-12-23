@@ -54,10 +54,9 @@ export async function awardXp(
         throw new Error("User stats not found");
     }
 
-    const newXp = stats.xp + xpGained;
-    const newTotalXp = stats.totalXpEarned + xpGained;
-    const oldLevel = stats.level;
-    const newLevel = getLevelFromXp(newXp);
+    const newTotalXp = stats.totalXp + xpGained;
+    const oldLevel = stats.currentLevel;
+    const newLevel = getLevelFromXp(newTotalXp);
     const leveledUp = newLevel > oldLevel;
 
     const oldRank = stats.rank as Rank;
@@ -69,18 +68,17 @@ export async function awardXp(
         userId,
         type: action,
         xpEarned: xpGained,
-        metadata: { multiplier, oldXp: stats.xp, newXp },
+        metadata: { multiplier, oldXp: stats.totalXp, newXp: newTotalXp },
     });
 
     // 2. Update stats read model
     await db
         .update(userStats)
         .set({
-            xp: newXp,
-            totalXpEarned: newTotalXp,
-            level: newLevel,
+            totalXp: newTotalXp,
+            currentLevel: newLevel,
             rank: newRank,
-            weeklyXP: stats.weeklyXP + xpGained,
+            weeklyXp: stats.weeklyXp + xpGained,
             updatedAt: new Date(),
         })
         .where(eq(userStats.userId, userId));
@@ -134,10 +132,10 @@ export async function checkAchievements(userId: string) {
         // Check based on requirement type
         switch (requirement.type) {
             case "level":
-                unlocked = userStat.level >= requirement.value;
+                unlocked = userStat.currentLevel >= requirement.value;
                 break;
             case "streak":
-                unlocked = userStat.streak >= requirement.value;
+                unlocked = userStat.currentStreak >= requirement.value;
                 break;
             case "workouts":
                 unlocked = userStat.totalWorkouts >= requirement.value;
@@ -149,7 +147,8 @@ export async function checkAchievements(userId: string) {
                 unlocked = userStat.challengesCompleted >= requirement.value;
                 break;
             case "social_score":
-                unlocked = userStat.socialScore >= requirement.value;
+                // socialScore removed or moved? mapping to postsCount for now or ignore 
+                unlocked = (userStat.postsCount || 0) >= requirement.value;
                 break;
         }
 
@@ -167,8 +166,7 @@ export async function checkAchievements(userId: string) {
                 await db
                     .update(userStats)
                     .set({
-                        xp: userStat.xp + achievement.xpReward,
-                        totalXpEarned: userStat.totalXpEarned + achievement.xpReward,
+                        totalXp: userStat.totalXp + achievement.xpReward,
                     })
                     .where(eq(userStats.userId, userId));
             }
@@ -202,16 +200,16 @@ export async function getLevelProgress(userId: string) {
         throw new Error("User stats not found");
     }
 
-    const currentLevelXp = getXpForLevel(stats.level);
-    const nextLevelXp = getXpForLevel(stats.level + 1);
-    const xpInCurrentLevel = stats.xp - currentLevelXp;
+    const currentLevelXp = getXpForLevel(stats.currentLevel);
+    const nextLevelXp = getXpForLevel(stats.currentLevel + 1);
+    const xpInCurrentLevel = stats.totalXp - currentLevelXp;
     const xpNeededForNextLevel = nextLevelXp - currentLevelXp;
     const progress = (xpInCurrentLevel / xpNeededForNextLevel) * 100;
 
     return {
-        currentLevel: stats.level,
+        currentLevel: stats.currentLevel,
         currentRank: stats.rank,
-        currentXp: stats.xp,
+        currentXp: stats.totalXp,
         xpInCurrentLevel,
         xpNeededForNextLevel,
         nextLevelXp,

@@ -3,12 +3,11 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import { analyzeWorkout, generateWorkoutPlan, adaptWorkoutForCheckIn } from "./ai.js";
 import {
-  insertUserSchema,
+  registerUserSchema,
   insertCheckInSchema,
   workoutExercises,
   insertPostSchema,
   insertPostCommentSchema,
-  insertUserSettingsSchema,
   insertGamificationEventSchema,
   insertWorkoutSessionSchema
 } from "../shared/schema.js";
@@ -29,7 +28,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const userData = insertUserSchema.parse(req.body);
+      const userData = registerUserSchema.parse(req.body);
       const existingUser = await storage.getUserByUsername(userData.username);
 
       if (existingUser) {
@@ -38,8 +37,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const hashedPassword = await bcrypt.hash(userData.password, 10);
       const user = await storage.createUser({
-        ...userData,
-        password: hashedPassword,
+        username: userData.username,
+        email: userData.email,
+        name: userData.name,
+        passwordHash: hashedPassword,
       });
 
       await storage.createUserStats(user.id);
@@ -54,7 +55,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const { password, ...userWithoutPassword } = user;
+      const { passwordHash, ...userWithoutPassword } = user;
       res.json({ user: userWithoutPassword });
     } catch (error: any) {
       console.error("Registration error:", error.message || error);
@@ -79,7 +80,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const trimmedUsername = username?.trim();
       const user = await storage.getUserByUsername(trimmedUsername);
 
-      if (!user || !(await bcrypt.compare(password, user.password))) {
+      if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
         return res.status(401).json({ error: "Invalid credentials" });
       }
 
@@ -93,7 +94,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const { password: _, ...userWithoutPassword } = user;
+      const { passwordHash: _, ...userWithoutPassword } = user;
       res.json({ user: userWithoutPassword });
     } catch (error) {
       res.status(400).json({ error: "Login failed" });
@@ -116,7 +117,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const { password, ...userWithoutPassword } = user;
+    const { passwordHash, ...userWithoutPassword } = user;
     res.json({ user: userWithoutPassword });
   });
 
@@ -293,8 +294,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const stats = await storage.getUserStats(req.session.userId);
       if (stats) {
         const today = new Date().toISOString().split('T')[0];
-        const lastWorkout = stats.lastWorkoutDate;
-        let newStreak = stats.streak;
+        const lastWorkout = (stats as any).lastWorkoutDate;
+        let newStreak = stats.currentStreak;
 
         if (lastWorkout) {
           const lastDate = new Date(lastWorkout);
@@ -302,7 +303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const diffDays = Math.floor((todayDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
 
           if (diffDays === 1) {
-            newStreak = stats.streak + 1;
+            newStreak = stats.currentStreak + 1;
             await awardXp(req.session.userId, "STREAK_INCREMENT");
           } else if (diffDays > 1) {
             newStreak = 1;
@@ -316,9 +317,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         await storage.updateUserStats(req.session.userId, {
           coins: stats.coins + coinsGain,
-          streak: newStreak,
+          currentStreak: newStreak,
           longestStreak: Math.max(newStreak, stats.longestStreak),
-          lastWorkoutDate: today,
+          // lastWorkoutDate: today, // Ensure this field exists in stats or profile
           totalWorkouts: stats.totalWorkouts + 1,
         });
 
@@ -328,22 +329,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (stats.totalWorkouts + 1 === 30) {
           await storage.awardBadge(req.session.userId, "workouts_30");
         }
+      }
 
-        // Create social post for workout completion
-        try {
-          await createPost(req.session.userId, {
-            type: "workout",
-            content: `Mais um treino finalizado! Protocolo concluído com sucesso. 🔥 #Foco #Evolução`,
-            workoutId: req.params.id,
-            visibility: "public"
-          });
-        } catch (postError) {
-          console.error("Error creating social post:", postError);
-        }
+      // Create social post for workout completion
+      try {
+        await createPost(req.session.userId, {
+          type: "workout",
+          content: `Mais um treino finalizado! Protocolo concluído com sucesso. 🔥 #Foco #Evolução`,
+          workoutId: req.params.id,
+          visibility: "public"
+        });
+      } catch (postError) {
+        console.error("Error creating social post:", postError);
       }
 
       res.json({ workout, xpGain: 50, coinsGain: 100 });
     } catch (error: any) {
+      console.error("Error completing workout:", error);
       res.status(400).json({ error: error.message });
     }
   });

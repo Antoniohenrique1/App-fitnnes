@@ -95,8 +95,8 @@ export async function generateDailyChallenges(userId: string) {
         .where(
             and(
                 eq(userChallenges.userId, userId),
-                gte(challenges.startDate, today),
-                lte(challenges.startDate, tomorrow)
+                gte(challenges.startsAt, today),
+                lte(challenges.startsAt, tomorrow)
             )
         );
 
@@ -123,8 +123,8 @@ export async function generateDailyChallenges(userId: string) {
                 rarity: template.rarity,
                 xpReward: template.xpReward,
                 coinsReward: template.coinsReward,
-                startDate: today,
-                endDate: tomorrow,
+                startsAt: today,
+                endsAt: tomorrow,
                 requirements: template.requirements,
             })
             .returning();
@@ -158,7 +158,7 @@ export async function getUserChallenges(userId: string) {
             and(
                 eq(userChallenges.userId, userId),
                 eq(userChallenges.status, "active"),
-                gte(challenges.endDate, new Date())
+                gte(challenges.endsAt, new Date())
             )
         );
 
@@ -234,7 +234,7 @@ export async function claimChallengeRewards(userId: string, challengeId: string)
     // Mark as claimed
     await db
         .update(userChallenges)
-        .set({ status: "claimed" })
+        .set({ status: "claimed", claimedAt: new Date() })
         .where(eq(userChallenges.id, userChallenge.id));
 
     // Get challenge details for rewards

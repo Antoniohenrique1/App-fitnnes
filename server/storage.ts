@@ -8,29 +8,30 @@ import {
   type Workout,
   type WorkoutExercise,
   type ExerciseLog,
-  type CheckIn,
-  type PersonalRecord,
-  type UserBadge,
-  type Mission,
-  users,
+  profiles,
   userStats,
   workoutPlans,
   workouts,
   workoutExercises,
   exerciseLogs,
-  checkIns,
   personalRecords,
-  userBadges,
-  missions,
+  achievements,
+  userAchievements,
+  challenges,
+  userChallenges,
+  posts,
+  follows,
+  leaderboards,
   shopItems,
   userInventory,
-  type UserSettings,
   type GamificationEvent,
   type WorkoutSession,
   type InsertWorkoutSession,
-  userSettings,
   gamificationEvents,
   workoutSessions,
+  type Profile,
+  type InsertProfile,
+  type UserSettings,
 } from "../shared/schema.js";
 
 export interface IStorage {
@@ -97,9 +98,9 @@ export interface IStorage {
   equipItem(userId: string, inventoryItemId: string): Promise<UserInventory | undefined>;
   createShopItem(item: any): Promise<ShopItem>;
 
-  // User Settings
+  // User Settings (Now part of Profile)
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
-  updateUserSettings(userId: string, data: Partial<UserSettings>): Promise<UserSettings>;
+  updateUserSettings(userId: string, data: Partial<UserSettings>): Promise<UserSettings | undefined>;
 
   // Gamification Events
   createGamificationEvent(event: any): Promise<GamificationEvent>;
@@ -114,22 +115,22 @@ export interface IStorage {
 export class DbStorage implements IStorage {
   // User operations
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
+    const [user] = await db.select().from(profiles).where(eq(profiles.id, id));
     return user;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
+    const [user] = await db.select().from(profiles).where(eq(profiles.username, username));
     return user;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+    const [user] = await db.insert(profiles).values(insertUser).returning();
     return user;
   }
 
   async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
-    const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning();
+    const [user] = await db.update(profiles).set({ ...data, updatedAt: new Date() }).where(eq(profiles.id, id)).returning();
     return user;
   }
 
@@ -150,7 +151,7 @@ export class DbStorage implements IStorage {
   }
 
   // Workout plan operations
-  async createWorkoutPlan(plan: { userId: string; name: string; description?: string; weekCount?: number }): Promise<WorkoutPlan> {
+  async createWorkoutPlan(plan: { userId: string; name: string; description?: string }): Promise<WorkoutPlan> {
     await db.update(workoutPlans).set({ active: false }).where(eq(workoutPlans.userId, plan.userId));
     const [workoutPlan] = await db.insert(workoutPlans).values(plan).returning();
     return workoutPlan;
@@ -166,7 +167,7 @@ export class DbStorage implements IStorage {
   }
 
   // Workout operations
-  async createWorkout(workout: { planId: string; weekNumber: number; dayNumber: number; focus: string; duration: number; scheduledDate?: string }): Promise<Workout> {
+  async createWorkout(workout: { planId: string; weekNumber: number; dayNumber: number; focus: string; duration: number }): Promise<Workout> {
     const [w] = await db.insert(workouts).values(workout).returning();
     return w;
   }
@@ -185,12 +186,16 @@ export class DbStorage implements IStorage {
     const plan = await this.getActiveWorkoutPlan(userId);
     if (!plan) return undefined;
 
-    const [workout] = await db.select().from(workouts).where(and(eq(workouts.planId, plan.id), eq(workouts.scheduledDate, today)));
+    // This logic might need refinement in the app, but for now matching by scheduledDate equivalent
+    // In the new schema, workouts are more structured. For now, returning first pending one.
+    const [workout] = await db.select().from(workouts)
+      .where(and(eq(workouts.planId, plan.id), eq(workouts.status, 'pending')))
+      .limit(1);
     return workout;
   }
 
   async completeWorkout(workoutId: string): Promise<Workout | undefined> {
-    const [workout] = await db.update(workouts).set({ completed: true, completedAt: new Date() }).where(eq(workouts.id, workoutId)).returning();
+    const [workout] = await db.update(workouts).set({ status: 'completed', completedAt: new Date() }).where(eq(workouts.id, workoutId)).returning();
     return workout;
   }
 
@@ -282,18 +287,18 @@ export class DbStorage implements IStorage {
   }
 
   // League operations
-  async getLeagueMembers(tier: string, limit: number = 10): Promise<Array<{ userId: string; username: string; name: string; weeklyXP: number; rank: number }>> {
+  async getLeagueMembers(rank: string, limit: number = 20): Promise<Array<{ userId: string; username: string; name: string; weeklyXp: number; rank: number }>> {
     const members = await db
       .select({
         userId: userStats.userId,
-        username: users.username,
-        name: users.name,
-        weeklyXP: userStats.weeklyXP,
+        username: profiles.username,
+        name: profiles.name,
+        weeklyXp: userStats.weeklyXp,
       })
       .from(userStats)
-      .innerJoin(users, eq(userStats.userId, users.id))
-      .where(eq(userStats.leagueTier, tier))
-      .orderBy(desc(userStats.weeklyXP))
+      .innerJoin(profiles, eq(userStats.userId, profiles.id))
+      .where(eq(userStats.rank, rank))
+      .orderBy(desc(userStats.weeklyXp))
       .limit(limit);
 
     return members.map((member: any, index: number) => ({
@@ -349,7 +354,7 @@ export class DbStorage implements IStorage {
     if (existing) {
       await db.update(userInventory).set({ quantity: existing.quantity + 1 }).where(eq(userInventory.id, existing.id));
     } else {
-      await db.insert(userInventory).values({ userId, itemId, quantity: 1 });
+      await db.insert(userInventory).values({ userId, itemId, quantity: 1, isEquipped: false });
     }
 
     return { success: true, message: "Purchase successful" };
@@ -359,17 +364,17 @@ export class DbStorage implements IStorage {
     const [item] = await db.select().from(userInventory).where(and(eq(userInventory.id, inventoryItemId), eq(userInventory.userId, userId)));
     if (!item) return undefined;
 
-    // Get item type to unequip others of same type
+    // Get item type/category to unequip others of same category
     const shopItem = await this.getShopItem(item.itemId);
     if (shopItem) {
       const userItems = await this.getUserInventory(userId);
-      const sameTypeItems = userItems.filter(ui => ui.item.type === shopItem.type && ui.id !== inventoryItemId);
-      for (const st of sameTypeItems) {
-        await db.update(userInventory).set({ equipped: false }).where(eq(userInventory.id, st.id));
+      const sameCategoryItems = userItems.filter(ui => ui.item.category === shopItem.category && ui.id !== inventoryItemId);
+      for (const st of sameCategoryItems) {
+        await db.update(userInventory).set({ isEquipped: false }).where(eq(userInventory.id, st.id));
       }
     }
 
-    const [updated] = await db.update(userInventory).set({ equipped: !item.equipped }).where(eq(userInventory.id, inventoryItemId)).returning();
+    const [updated] = await db.update(userInventory).set({ isEquipped: !item.isEquipped }).where(eq(userInventory.id, inventoryItemId)).returning();
     return updated;
   }
 
@@ -753,28 +758,19 @@ export class MemStorage implements IStorage {
     return newItem;
   }
 
-  // User Settings
+  // User Settings (Consolidated in Profile)
   async getUserSettings(userId: string): Promise<UserSettings | undefined> {
-    const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
-    return settings;
+    const [user] = await db.select().from(profiles).where(eq(profiles.id, userId));
+    return user;
   }
 
-  async updateUserSettings(userId: string, data: Partial<UserSettings>): Promise<UserSettings> {
-    const [existing] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
-    if (existing) {
-      const [updated] = await db
-        .update(userSettings)
-        .set({ ...data, updatedAt: new Date() })
-        .where(eq(userSettings.userId, userId))
-        .returning();
-      return updated;
-    } else {
-      const [created] = await db
-        .insert(userSettings)
-        .values({ userId, ...data } as any) // Cast needed for partial insert if allowed
-        .returning();
-      return created;
-    }
+  async updateUserSettings(userId: string, data: Partial<UserSettings>): Promise<UserSettings | undefined> {
+    const [user] = await db
+      .update(profiles)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(profiles.id, userId))
+      .returning();
+    return user;
   }
 
   // Gamification Events
