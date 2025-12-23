@@ -24,6 +24,13 @@ import {
   missions,
   shopItems,
   userInventory,
+  type UserSettings,
+  type GamificationEvent,
+  type WorkoutSession,
+  type InsertWorkoutSession,
+  userSettings,
+  gamificationEvents,
+  workoutSessions,
 } from "../shared/schema.js";
 
 export interface IStorage {
@@ -89,6 +96,19 @@ export interface IStorage {
   purchaseItem(userId: string, itemId: string, currency: 'coins' | 'gems'): Promise<{ success: boolean; message: string }>;
   equipItem(userId: string, inventoryItemId: string): Promise<UserInventory | undefined>;
   createShopItem(item: any): Promise<ShopItem>;
+
+  // User Settings
+  getUserSettings(userId: string): Promise<UserSettings | undefined>;
+  updateUserSettings(userId: string, data: Partial<UserSettings>): Promise<UserSettings>;
+
+  // Gamification Events
+  createGamificationEvent(event: any): Promise<GamificationEvent>;
+  getGamificationEvents(userId: string, limit?: number): Promise<GamificationEvent[]>;
+
+  // Workout Sessions
+  createWorkoutSession(session: any): Promise<WorkoutSession>;
+  updateWorkoutSession(id: string, data: Partial<WorkoutSession>): Promise<WorkoutSession | undefined>;
+  getUserWorkoutSessions(userId: string): Promise<WorkoutSession[]>;
 }
 
 export class DbStorage implements IStorage {
@@ -732,6 +752,68 @@ export class MemStorage implements IStorage {
     this.shopItems.set(id, newItem);
     return newItem;
   }
+
+  // User Settings
+  async getUserSettings(userId: string): Promise<UserSettings | undefined> {
+    const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+    return settings;
+  }
+
+  async updateUserSettings(userId: string, data: Partial<UserSettings>): Promise<UserSettings> {
+    const [existing] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+    if (existing) {
+      const [updated] = await db
+        .update(userSettings)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(userSettings.userId, userId))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db
+        .insert(userSettings)
+        .values({ userId, ...data } as any) // Cast needed for partial insert if allowed
+        .returning();
+      return created;
+    }
+  }
+
+  // Gamification Events
+  async createGamificationEvent(event: any): Promise<GamificationEvent> {
+    const [created] = await db.insert(gamificationEvents).values(event).returning();
+    return created;
+  }
+
+  async getGamificationEvents(userId: string, limit = 20): Promise<GamificationEvent[]> {
+    return db
+      .select()
+      .from(gamificationEvents)
+      .where(eq(gamificationEvents.userId, userId))
+      .orderBy(desc(gamificationEvents.createdAt))
+      .limit(limit);
+  }
+
+  // Workout Sessions
+  async createWorkoutSession(session: any): Promise<WorkoutSession> {
+    const [created] = await db.insert(workoutSessions).values(session).returning();
+    return created;
+  }
+
+  async updateWorkoutSession(id: string, data: Partial<WorkoutSession>): Promise<WorkoutSession | undefined> {
+    const [updated] = await db
+      .update(workoutSessions)
+      .set(data as any)
+      .where(eq(workoutSessions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getUserWorkoutSessions(userId: string): Promise<WorkoutSession[]> {
+    return db
+      .select()
+      .from(workoutSessions)
+      .where(eq(workoutSessions.userId, userId))
+      .orderBy(desc(workoutSessions.startedAt));
+  }
 }
 
-export const storage = process.env.DATABASE_URL ? new DbStorage() : new MemStorage();
+export const storage = new DbStorage();
